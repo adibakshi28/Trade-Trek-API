@@ -44,7 +44,82 @@ To save all the libraries installed in venv in requirement.txt
 
 Installing all the project libraries (in venv)
 > pip install -r requirements.txt
- 
+
+
+TODO:
+1) Stock page showing all stock related info (API -> /stock?TICKER='') (Main stock info page) - (Historical price graph will only have option of 1 Day (5min frequency), 1 Week (30min frequency), 15day (60mins frequency), 1 Year(1day frequency))
+2) stock/search?TICKER='' -> Stock search API (Passing part staring as query param and it return max top 10 matched results, searchable by name and ticker) - saving all tickers in-memory DB (Redis) each with the run of sync_stock_universe cron
+3) stock/transaction (POST) API -> Both BUY and SELL - (Making transaction only possible from main stock info page)
+4) user/transactions (GET) API -> Return all user transactions
+5) user/portfolio API returns the current portfolio holding of the person and current value
+6) user/funds -> return cash of the user
+7) user/change/password -> Change password (Require old and new password)
+8) Dont allow fractional shares (Initially) -> Make in config (allowFractionalQuantity = false, fractionalQuantityThreshold = 0.1 ie min qty to buy for an asset) 
+9) Initially dont allow short sell -> Make in config -> (allowShortSell = false) 
+10) Give initial cash to the person on resistration -> Make in config (startingCash = 100000)
+11) user/portfolio/history (GET) ->API to show portfolio value over time  - (Portfolio value calculated using - Historical price graph will only have option of 1 Day (5min frequency), 1 Week (30min frequency), 15day (60mins frequency), 1 Year(1day frequency))
+12) Max stocks in a portfolio (Config - maxAssetsAllowedinPortfolio = 10)
+13) Schedule job to invalidate session after 90 mins (from config) (And unsubscribe to stocks)
+
+? How to update portfolio value, Stock val in real time (maybe for logged in user) - (Maybe, keep a list of all the stocks in Stocks Table and update via websocker or API)
+(Maybe done by cron) (What frequency to update stock ltp if doing via api)
+Plan - For every logged in user open a websocket and subscribe to that persons portfolio stocks and update portfolio value in real time (showing value of his indivudial position in real time)
+(Config - maxAssetsAllowedinPortfolio = 10)
+The stock table will keep the record of currently active stocks, for which price should be updated from websocket.
+Person logging in would copy his portfolio stocks to that Stocks table and subscribe those stocks to websocket updating LTP and updating LTP in Stock table.
+
+For BE-FE interation will also be websocket to send surrent value of indivudial position, portfolio ltp, net portfolio value
+
+? When to unsubscribe from a stock (and remove from Stock table) 
+(Session mgt - Unsubscribe from stock websocket when user logs out(Session ends); we can implement a heartbeat mechanism with threshold of 30s after which the user is logged out)
+
+? Should we save stocks LTP in STock table getting price from websocket or directly cascade it to FE websocket?
+(If deciding to update the table we can cose the frequency threshold for write operations, eg once every 5 seconds)
+
+We can use a in memory DB (Redis), (v fast writes) and serve as the central place to store websocket price updates and from there serve to the FE websocket
+Every 5 mins update the LTP to main DB Stock table (The Stock table will contain the stocks subscribed from the begining but LTP will only be updated every 5 mins via cron) 
+
+(In this workflow, we can chose to remove the Stock table all together and only serve realtime prices and maintain stock subscription list from Redis)
+
+User Logs in:
+    Get a list of his portfolio stocks (From main DB)
+    Update these stocks in Stock table (in main DB) and in Redis and subscribe them to websocket
+
+Real-Time Updates:
+    Fetch live data from WebSocket.
+    Update Redis (stock_ticker -> LTP) immediately.
+    Push updates to all connected users via WebSocket.
+
+Periodic Sync (Every Few Minutes (5mins)):
+    A scheduled background task writes Redis data into the Stock_Tracker table in batches.
+
+Heartbeat:
+    FE will send constant pings (Every 20 sec) (Heartbeat) and if a heartbeat is not recieved for 60sec:
+        - Unsubscribe to his stocks from updating via websocket (Cleaning the redis subscribed stocks DB)
+        - Log the user out (Marking his session inactive)
 
 
 
+Flow removing Stock table from main DB
+
+User Logs in:
+    Get a list of his portfolio stocks (From main DB) (Restrict max 10 stock in portfolio)
+    Update these stocks in Redis and subscribe them to websocket
+
+Real-Time Updates:
+    Fetch live data from WebSocket.
+    Update Redis (stock_ticker -> LTP) immediately.
+    Push updates to all connected users FE via indivudial WebSocket.
+
+Heartbeat:
+    FE will send constant pings (every 20 sec) (Heartbeat) and if a heartbeat is not received for 60sec:
+        - Unsubscribe to his stocks from updating via websocket (Cleaning the redis subscribed stocks DB)
+        - Log the user out (Marking his session inactive)
+
+
+
+API for fetching real time price will only be used for indivudial stock page
+
+Overcomming 50 stock subscriptions/websocket connection.
+-> Check we we can create multiple wb connections (With a single free tier Finnhub account)
+-> If multiple websocket connects are not abllowed the add in more API keys (Fake accounts) and use them for other wb connections

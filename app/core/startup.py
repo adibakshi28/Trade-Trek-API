@@ -4,6 +4,7 @@ import requests
 from fastapi import FastAPI
 from app.jobs.scheduler import start_scheduler
 from app.models.database import check_connection
+from app.models.sqlite_cache import init_db, check_db_mode
 from app.core.config import config
 
 
@@ -100,6 +101,29 @@ def validate_db_connection():
         print("✅ Connected to Supabase DB.")
     else:
         raise ConnectionError("Could NOT connect to Supabase DB. Check your SUPABASE_URL / SERVICE_KEY.")
+    
+
+async def initlize_in_memory_cache():
+    """
+    Initialize the SQLite in-memory cache.
+    """
+    try:
+        await init_db()
+
+        inMemoryDBConfig = await check_db_mode()
+
+        if (
+            inMemoryDBConfig['journal_mode'] != 'memory' or
+            len(inMemoryDBConfig['database_list']) == 0 or
+            inMemoryDBConfig['database_list'][0][0] != 0 or
+            inMemoryDBConfig['database_list'][0][1] != 'main' or
+            inMemoryDBConfig['database_list'][0][2] != ''
+        ):
+            print("⚠️  SQLite DB is not configured correctly - Not in-memory mode.")
+
+        print("✅ SQLite cache initiated.")
+    except Exception as e:
+        print(f"❌ Failed to initialize SQLite cache: {e}")
      
 
 def register_startup_events(app: FastAPI):
@@ -108,7 +132,7 @@ def register_startup_events(app: FastAPI):
     """
 
     @app.on_event("startup")
-    def startup_events():
+    async def startup_events():
 
         print("🚀 Running Startup Checks...")
         try:
@@ -116,6 +140,7 @@ def register_startup_events(app: FastAPI):
             validate_configuration(config=config)
             check_third_party_services(config=config)
             validate_db_connection()
+            await initlize_in_memory_cache()
             print("🚀 All Startup Checks Passed Successfully!")
         except Exception as e:
             print(f"❌ Startup Check Failed: {e}")

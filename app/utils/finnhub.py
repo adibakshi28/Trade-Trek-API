@@ -1,5 +1,6 @@
 import os
 import httpx
+from datetime import datetime
 from dotenv import load_dotenv
 from app.core.config import config, FINNHUB_API_KEY
 from typing import Dict, Any, List
@@ -75,3 +76,28 @@ async def get_stock_quote(symbol: str) -> Dict[str, Any]:
 #     except Exception as e:
 #         aapl_price = f"Failed to fetch price: {e}"
 
+
+async def get_historical_stock_data(symbol: str, start_date: str, end_date: str, resolution: str = "D") -> List[Dict[str, Any]]:
+    """
+    Fetch historical stock data for a given symbol, date range, and resolution.
+
+    Args:
+        symbol (str): The stock ticker symbol (e.g., AAPL).
+        start_date (str): Start date in 'YYYY-MM-DD' format.
+        end_date (str): End date in 'YYYY-MM-DD' format.
+        resolution (str): Time interval resolution. Valid options are '1', '5', '15', '30', '60', 'D', 'W', 'M'.
+    """
+
+    response = await make_request("stock/candle", {"symbol": symbol, "resolution": resolution, "from": int(datetime.strptime(start_date, "%Y-%m-%d").timestamp()), "to": int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())})
+
+    historical_data = []
+    for i in range(len(response.get("t", []))):
+        historical_data.append({
+            "date": datetime.utcfromtimestamp(response["t"][i]).strftime("%Y-%m-%d %H:%M:%S"),
+            "open": response["o"][i],
+            "high": response["h"][i],
+            "low": response["l"][i],
+            "close": response["c"][i],
+            "volume": response["v"][i]
+        })
+    return historical_data
