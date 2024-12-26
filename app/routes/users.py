@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from typing import List, Dict
 
 from app.middlewares.jwt_auth import require_active_session
-from app.services.user_service import user_transactions_service, user_funds_service, user_info_service
+from app.services.user_service import user_transactions_service, user_funds_service, user_info_service, user_portfolio_service
 
 router = APIRouter()
 
@@ -32,7 +32,7 @@ def get_user_portfolio(payload: dict = Depends(require_active_session)) -> List[
     Return all user transactions
     """
     user_id = payload.get("user_id")
-    transactions = user_transactions_service(user_id)
+    transactions = user_portfolio_service(user_id)
     return transactions
 
 @router.get("/funds")

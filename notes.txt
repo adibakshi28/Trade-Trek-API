@@ -49,17 +49,18 @@ Installing all the project libraries (in venv)
 TODO:
 ✅ 1) Stock page showing all stock related info (API -> /stock?TICKER='') (Main stock info page) - (Historical price graph will only have option of 1 Day (5min frequency), 1 Week (30min frequency), 15day (60mins frequency), 1 Year(1day frequency))
 ✅ 2) stock/search?TICKER='' -> Stock search API (Passing part staring as query param and it return max top 10 matched results, searchable by name and ticker) - saving all tickers in-memory DB (Redis) each with the run of sync_stock_universe cron
-3) stock/transaction (POST) API -> Both BUY and SELL - (Making transaction only possible from main stock info page)
-4) user/transactions (GET) API -> Return all user transactions
-5) user/portfolio (GET) API returns the current portfolio holding of the person and current value
-6) user/funds -> return cash of the user
+✅ 3) stock/transaction (POST) API -> Both BUY and SELL - (Making transaction only possible from main stock info page)
+✅ 4) user/transactions (GET) API -> Return all user transactions
+✅ 5) user/portfolio (GET) API -> returns the current portfolio holding of the person and current value
+✅ 6) user/funds (GET) API -> return cash of the user
 7) user/change/password -> Change password (Require old and new password)
-8) Dont allow fractional shares (Initially) -> Make in config (allowFractionalQuantity = false, fractionalQuantityThreshold = 0.1 ie min qty to buy for an asset) 
-9) Initially dont allow short sell -> Make in config -> (allowShortSell = false) 
-10) Give initial cash to the person on resistration -> Make in config (startingCash = 100000)
-11) user/portfolio/history (GET) ->API to show portfolio value over time  - (Portfolio value calculated using - Historical price graph will only have option of 1 Day (5min frequency), 1 Week (30min frequency), 15day (60mins frequency), 1 Year(1day frequency))
-12) Max stocks in a portfolio (Config - maxAssetsAllowedinPortfolio = 10)
+✅ 8) Dont allow fractional shares (Initially) -> Make in config (allowFractionalQuantity = false, fractionalQuantityThreshold = 0.1 ie min qty to buy for an asset) 
+✅ 9) Initially dont allow short sell -> Make in config -> (allowShortSell = false) 
+✅ 10) Give initial cash to the person on resistration -> Make in config (startingCash = 100000)
+11) user/portfolio/history (GET) API -> to show portfolio value over time  - (Portfolio value calculated using - Historical price graph will only have option of 1 Day (5min frequency), 1 Week (30min frequency), 15day (60mins frequency), 1 Year(1day frequency))
+✅ 12) Max stocks in a portfolio (Config - maxAssetsAllowedinPortfolio = 10)
 13) Schedule job to invalidate session after 90 mins (from config) (And unsubscribe to stocks)
+14) invalidate_any_active_session() in startup check uncomment while deploying
 
 ? How to update portfolio value, Stock val in real time (maybe for logged in user) - (Maybe, keep a list of all the stocks in Stocks Table and update via websocker or API)
 (Maybe done by cron) (What frequency to update stock ltp if doing via api)

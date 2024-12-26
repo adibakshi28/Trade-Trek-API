@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 
 from app.middlewares.jwt_auth import require_active_session
-from app.services.data_service import search_stock_service, stock_info_service, stock_historical_service
+from app.services.data_service import search_stock_service, stock_info_service, stock_historical_service, stock_transaction_service
 
 router = APIRouter()
 
@@ -52,3 +52,20 @@ async def search_stock(ticker: str, payload: dict = Depends(require_active_sessi
 
     stock = await search_stock_service(ticker, 5)
     return stock
+
+@router.post("/transaction")
+async def make_stock_transaction(ticker: str, direction: str, quantity: float, payload: dict = Depends(require_active_session)):
+    """
+    Make a stock transaction.
+    """
+    user_id = payload.get("user_id")
+    
+    if not ticker or not direction or not quantity:
+        raise HTTPException(
+            status_code=400,
+            detail="ticker, direction, and quantity are required"
+        )
+    
+    transaction = await stock_transaction_service(user_id, ticker, direction, quantity)
+    return transaction
+

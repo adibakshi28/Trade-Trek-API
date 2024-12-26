@@ -6,6 +6,7 @@ from app.jobs.scheduler import start_scheduler
 from app.models.database import check_connection
 from app.models.sqlite_cache import init_db, check_db_mode
 from app.core.cache import create_stock_universe_cache
+from app.models.database import supabase
 from app.core.config import config
 
 
@@ -40,7 +41,11 @@ def validate_configuration(config: dict):
         "EXCHANGE",
         "TIMEZONE",
         "STOCK_UNIVERSE_CACHE_TABLE",
-        "INITIAL_CASH"
+        "INITIAL_CASH",
+        "ALLOW_FRACTIONAL_SHARES",
+        "FRACTIONAL_SHARES_MIN_TRADE",
+        "ALLOW_SHORT_SELLING",
+        "MAX_ASSETS_IN_PORTFOLIO",
     ]
 
     missing_vars = [
@@ -89,7 +94,7 @@ def check_third_party_services(config: dict):
         raise ConnectionError(f"Error connecting to Finnhub API: {e}")
     
     except Exception as e:
-        raise Exception(f"Unexpected error: {e}")
+        raise Exception(f"Unexpected error while checking Finnhub API connection: {e}")
 
     
     # TODO -> Check for finnhub websocket connection
@@ -104,6 +109,17 @@ def validate_db_connection():
         print("✅ Connected to Supabase DB.")
     else:
         raise ConnectionError("Could NOT connect to Supabase DB. Check your SUPABASE_URL / SERVICE_KEY.")
+    
+
+def invalidate_any_active_session():
+    """
+    Invalidate any active user session
+    """
+    try:
+        supabase.table("Sessions").update({"is_active": False}).eq("is_active", True).execute()
+        print("✅ All active user sessions invalidated.")
+    except Exception as e:
+        raise Exception(f"Unexpected error while invalidating sessions: {e}")
     
 
 async def initlize_in_memory_cache():
@@ -145,6 +161,7 @@ def register_startup_events(app: FastAPI):
             validate_configuration(config=config)
             check_third_party_services(config=config)
             validate_db_connection()
+            # invalidate_any_active_session()
             await initlize_in_memory_cache()
             print("🚀 All Startup Checks Passed Successfully!")
         except Exception as e:

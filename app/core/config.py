@@ -15,4 +15,8 @@ config = {
     "TIMEZONE": timezone("America/New_York"),
     'STOCK_UNIVERSE_CACHE_TABLE': 'Stock_Universe_Cache',
     "INITIAL_CASH": 100000,
+    "ALLOW_FRACTIONAL_SHARES": True,
+    "FRACTIONAL_SHARES_MIN_TRADE": 0.1,
+    "ALLOW_SHORT_SELLING": True,
+    "MAX_ASSETS_IN_PORTFOLIO": 10,
 }
