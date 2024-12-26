@@ -40,8 +40,6 @@ async def check_db_mode():
     return result
 
 
-
-
 ### 🚀 Close the Shared Database Connection
 async def close_db():
     """Close the shared SQLite database connection."""
@@ -82,6 +80,53 @@ async def create_table(table_name: str, schema: str):
     query = f"CREATE TABLE IF NOT EXISTS {table_name} ({schema})"
     await db_connection.execute(query)
     await db_connection.commit()
+
+
+async def check_table_exists(table_name: str) -> bool:
+    """
+    Check if a table exists in the SQLite database. (Return True if it does else false)
+    """
+    try:
+        async with db_connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,)
+        ) as cursor:
+            result = await cursor.fetchone()
+            return result is not None
+    except Exception as ex:
+        raise ex
+    
+
+async def execute_sql(query: str, params: list = None, bulk: bool = False) -> list:
+    """
+    Execute a generic SQL command on the database.
+    
+    Args:
+        query (str): The SQL query to execute.
+        params (list): Parameters for the SQL query.
+        bulk (bool): If True, use executemany for batch execution.
+    
+    Returns:
+        list: Query results if the command returns data (e.g., SELECT).
+    """
+    try:
+        if bulk:
+            if not isinstance(params, list):
+                raise ValueError("For bulk execution, 'params' must be a list of tuples.")
+            await db_connection.executemany(query, params)
+        else:
+            params = params or []
+            await db_connection.execute(query, params)
+        
+        await db_connection.commit()
+        
+        if query.strip().upper().startswith("SELECT"):
+            async with db_connection.execute(query, params) as cursor:
+                return await cursor.fetchall()
+        return []
+    except Exception as ex:
+        print(f"❌ Failed to execute SQL query: {query}")
+        print(f"Error: {ex}")
+        raise ex
 
 
 async def insert_into_table(table_name: str, columns: list[str], values: list):
@@ -141,3 +186,17 @@ async def delete_from_table(table_name: str, criteria: str, params: tuple):
     query = f"DELETE FROM {table_name} WHERE {criteria}"
     await db_connection.execute(query, params)
     await db_connection.commit()
+
+
+async def drop_table(table_name: str):
+    """
+    Drop a table from the database.
+    Args:
+        table_name (str): The name of the table to drop.
+    """
+    try:
+        query = f"DROP TABLE IF EXISTS {table_name}"
+        await db_connection.execute(query)
+        await db_connection.commit()
+    except Exception as e:
+        raise e

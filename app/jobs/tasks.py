@@ -1,14 +1,19 @@
 import asyncio
 from app.models.database import supabase
 from app.utils.finnhub import get_stock_symbols
+from app.core.cache import create_stock_universe_cache
 from app.core.config import config
 from datetime import datetime
-
 
 def another_task():
     print(f"[SCHEDULED JOB] Cron Job dummy {datetime.now()}")
 
-def sync_stock_universe():
+async def update_stock_universe_cache():
+    print(f"🔄 [SCHEDULED JOB] Starting Update Stock Universe sync job ...")
+    await create_stock_universe_cache()
+    print(f"✅ [SCHEDULED JOB] Stock Universe Cache updated Successfully!")
+
+async def sync_stock_universe():
     """
     Fetch stock symbols from Finnhub and update the Stock_Universe table efficiently in batches.
     Only update records if there are changes.

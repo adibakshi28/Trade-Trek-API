@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.jobs.scheduler import start_scheduler
 from app.models.database import check_connection
 from app.models.sqlite_cache import init_db, check_db_mode
+from app.core.cache import create_stock_universe_cache
 from app.core.config import config
 
 
@@ -38,6 +39,7 @@ def validate_configuration(config: dict):
         "ACCESS_TOKEN_EXPIRE_MINUTES",
         "EXCHANGE",
         "TIMEZONE",
+        "STOCK_UNIVERSE_CACHE_TABLE"
     ]
 
     missing_vars = [
@@ -105,7 +107,7 @@ def validate_db_connection():
 
 async def initlize_in_memory_cache():
     """
-    Initialize the SQLite in-memory cache.
+    Initialize the SQLite in-memory cache and create cached tables.
     """
     try:
         await init_db()
@@ -121,7 +123,9 @@ async def initlize_in_memory_cache():
         ):
             print("⚠️  SQLite DB is not configured correctly - Not in-memory mode.")
 
-        print("✅ SQLite cache initiated.")
+        await create_stock_universe_cache()
+
+        print("✅ SQLite cache initiated and created.")
     except Exception as e:
         print(f"❌ Failed to initialize SQLite cache: {e}")
      

@@ -13,4 +13,5 @@ config = {
     "ACCESS_TOKEN_EXPIRE_MINUTES": 90,
     "EXCHANGE": "US",
     "TIMEZONE": timezone("America/New_York"),
+    'STOCK_UNIVERSE_CACHE_TABLE': 'Stock_Universe_Cache',
 }
