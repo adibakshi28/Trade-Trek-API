@@ -4,6 +4,7 @@ from typing import Optional, List, Dict
 from postgrest import APIError
 
 from app.models.database import supabase
+from app.core.config import config
 from app.utils.helpers import hash_password, verify_password
 from app.utils.token import create_access_token
 
@@ -36,7 +37,20 @@ def register_user(first_name: str, last_name: str, email: str, username: str, pa
         response = supabase.table("Users").insert(data).execute()
         
         inserted = response.data or []
-        return inserted[0] if inserted else None
+    
+        if inserted:
+            id = inserted[0].get("id")
+
+            data = {
+                "user_id": id,
+                "cash": config['INITIAL_CASH'],
+                "is_active": True,
+            }
+            response = supabase.table("Cash").insert(data).execute()
+
+            return inserted[0]
+        else:
+            return None
     
     except ValueError as ve:
         # Handle uniqueness errors

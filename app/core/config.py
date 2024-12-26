@@ -14,4 +14,5 @@ config = {
     "EXCHANGE": "US",
     "TIMEZONE": timezone("America/New_York"),
     'STOCK_UNIVERSE_CACHE_TABLE': 'Stock_Universe_Cache',
+    "INITIAL_CASH": 100000,
 }

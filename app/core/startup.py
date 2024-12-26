@@ -39,7 +39,8 @@ def validate_configuration(config: dict):
         "ACCESS_TOKEN_EXPIRE_MINUTES",
         "EXCHANGE",
         "TIMEZONE",
-        "STOCK_UNIVERSE_CACHE_TABLE"
+        "STOCK_UNIVERSE_CACHE_TABLE",
+        "INITIAL_CASH"
     ]
 
     missing_vars = [
