@@ -68,15 +68,7 @@ async def get_stock_quote(symbol: str) -> Dict[str, Any]:
     return await make_request("quote", {"symbol": symbol})
 
 
-# Usage
-#   -> The function should be async def
-#     try:
-#         stock_price = await get_stock_quote("AAPL")
-#         aapl_price = stock_price.get("c", "Price not available")
-#     except Exception as e:
-#         aapl_price = f"Failed to fetch price: {e}"
-
-
+# TODO: This is giving forbidden error
 async def get_historical_stock_data(symbol: str, start_date: str, end_date: str, resolution: str = "D") -> List[Dict[str, Any]]:
     """
     Fetch historical stock data for a given symbol, date range, and resolution.
