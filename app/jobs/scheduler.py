@@ -26,7 +26,7 @@ def start_scheduler():
     
     # For running async functions
     scheduler.add_job(run_async_job, IntervalTrigger(hours=24), id="update_stock_universe_cache", replace_existing=True, args=[update_stock_universe_cache])
-    scheduler.add_job(run_async_job, IntervalTrigger(seconds=30), id="sync_stock_subscription", replace_existing=True, args=[sync_stock_subscription])
+    scheduler.add_job(run_async_job, IntervalTrigger(minutes=1), id="sync_stock_subscription", replace_existing=True, args=[sync_stock_subscription])
 
     # scheduler.add_job(run_async_job, IntervalTrigger(seconds=15), id="print_stock_subscription_table_task", replace_existing=True, args=[print_stock_subscription_table])
 
