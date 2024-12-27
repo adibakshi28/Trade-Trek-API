@@ -100,9 +100,6 @@ def check_third_party_services(config: dict):
     
     except Exception as e:
         raise Exception(f"Unexpected error while checking Finnhub API connection: {e}")
-
-    
-    # TODO -> Check for finnhub websocket connection
     
 
 def validate_db_connection():
