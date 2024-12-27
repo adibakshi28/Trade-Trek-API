@@ -52,11 +52,12 @@ def validate_configuration(config: dict):
         "FRACTIONAL_SHARES_MIN_TRADE",
         "ALLOW_SHORT_SELLING",
         "MAX_ASSETS_IN_PORTFOLIO",
+        "TRANSACTION_FEE",
     ]
 
     missing_vars = [
         var for var in required_config_vars 
-        if var not in config or not config.get(var)
+        if var not in config or config[var] is None
     ]
 
     if missing_vars:

@@ -152,6 +152,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
     FRACTIONAL_SHARES_MIN_TRADE = config.get("FRACTIONAL_SHARES_MIN_TRADE")
     ALLOW_SHORT_SELLING = config.get("ALLOW_SHORT_SELLING")
     MAX_ASSETS_IN_PORTFOLIO = config.get("MAX_ASSETS_IN_PORTFOLIO")
+    TRANSACTION_FEE = config.get("TRANSACTION_FEE")
     try:
         if not await check_table_exists(STOCK_UNIVERSE_CACHE_TABLE):
             await create_stock_universe_cache()
@@ -239,7 +240,8 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
         # !: Check for sufficient cash balance (by calculating transaction value)
         cash = supabase.table("Cash").select("cash").eq("user_id", user_id).eq("is_active", True).execute()
         cash = cash.data[0]['cash'] if cash.data else 0
-        transaction_value = price * quantity
+        transaction_value = round((price * quantity), 2)
+        transaction_fee = round(transaction_value * TRANSACTION_FEE, 2)
         
         if direction == "BUY" and ticker not in portfolioStocks and cash < transaction_value:
             raise HTTPException(
@@ -273,7 +275,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 }
                 portfolioUpdateResponse = supabase.table("Holdings").update(portfolioUpdate).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                 cashUpdate = {
-                    "cash": round((cash - transaction_value),2)
+                    "cash": round((cash - transaction_value),2) - transaction_fee
                 }
                 cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                 transaction = {
@@ -282,6 +284,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                     "direction": direction,
                     "quantity": quantity,
                     "execution_price": price,
+                    "transaction_fee": transaction_fee,
                     "is_active": True
                 }
                 transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
@@ -295,7 +298,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 elif stock['quantity'] == quantity:
                     portfolioUpdateResponse = supabase.table("Holdings").update({"quantity": 0, "is_active": False}).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                     cashUpdate = {
-                        "cash": round(((cash + (stock['execution_price']*quantity)) + (stock['execution_price']*quantity) - transaction_value), 2)
+                        "cash": round(((cash + (stock['execution_price']*quantity)) + (stock['execution_price']*quantity) - transaction_value), 2) - transaction_fee
                     }
                     cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                     transaction = {
@@ -304,6 +307,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                         "direction": direction,
                         "quantity": quantity,
                         "execution_price": price,
+                        "transaction_fee": transaction_fee,
                         "is_active": True
                     }
                     transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
@@ -324,7 +328,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
             }
             portfolioInsertResponse = supabase.table("Holdings").insert(portfolioInsert).execute()
             cashUpdate = {
-                "cash": round((cash - transaction_value),2)
+                "cash": round((cash - transaction_value),2) - transaction_fee
             }
             cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
             transaction = {
@@ -333,6 +337,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 "direction": direction,
                 "quantity": quantity,
                 "execution_price": price,
+                "transaction_fee": transaction_fee,
                 "is_active": True
             }
             transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
@@ -348,7 +353,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 elif stock['quantity'] == quantity:
                     portfolioUpdateResponse = supabase.table("Holdings").update({"quantity": 0, "is_active": False}).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                     cashUpdate = {
-                        "cash": round((cash + transaction_value),2)
+                        "cash": round((cash + transaction_value),2) - transaction_fee
                     }
                     cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                     transaction = {
@@ -357,6 +362,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                         "direction": direction,
                         "quantity": quantity,
                         "execution_price": price,
+                        "transaction_fee": transaction_fee,
                         "is_active": True
                     }
                     transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
@@ -366,7 +372,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                     }
                     portfolioUpdateResponse = supabase.table("Holdings").update(portfolioUpdate).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                     cashUpdate = {
-                        "cash": round((cash + transaction_value),2)
+                        "cash": round((cash + transaction_value),2) - transaction_fee
                     }
                     cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                     transaction = {
@@ -375,6 +381,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                         "direction": direction,
                         "quantity": quantity,
                         "execution_price": price,
+                        "transaction_fee": transaction_fee,
                         "is_active": True
                     }
                     transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
@@ -385,7 +392,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 }
                 portfolioUpdateResponse = supabase.table("Holdings").update(portfolioUpdate).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                 cashUpdate = {
-                    "cash": round((cash - transaction_value),2)
+                    "cash": round((cash - transaction_value),2) - transaction_fee
                 }
                 cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                 transaction = {
@@ -394,6 +401,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                     "direction": direction,
                     "quantity": quantity,
                     "execution_price": price,
+                    "transaction_fee": transaction_fee,
                     "is_active": True
                 }
                 transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
@@ -415,7 +423,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 }
                 portfolioInsertResponse = supabase.table("Holdings").insert(portfolioInsert).execute()
                 cashUpdate = {
-                    "cash": round((cash - transaction_value),2)
+                    "cash": round((cash - transaction_value),2) - transaction_fee
                 }
                 cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                 transaction = {
@@ -424,6 +432,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                     "direction": direction,
                     "quantity": quantity,
                     "execution_price": price,
+                    "transaction_fee": transaction_fee,
                     "is_active": True
                 }
                 transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
@@ -442,6 +451,8 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
             "quantity": quantity,
             "direction": direction,
             "cashBalance": currentCash.data[0]['cash'],
+            "transactionFee": transaction_fee,
+            "transactionValue": transaction_value,
             "currentPortfolio": currentPortfolio.data
         }
 
