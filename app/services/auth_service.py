@@ -44,7 +44,7 @@ def register_user(first_name: str, last_name: str, email: str, username: str, pa
 
             data = {
                 "user_id": id,
-                "cash": config['INITIAL_CASH'],
+                "cash": round(config['INITIAL_CASH'], 2),
                 "is_active": True,
             }
             response = supabase.table("Cash").insert(data).execute()

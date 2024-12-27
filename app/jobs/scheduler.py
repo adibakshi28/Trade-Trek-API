@@ -1,7 +1,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from app.jobs.tasks import update_stock_universe_cache, sync_stock_universe, another_task, print_stock_subscription_table, unsubscribe_stocks
+from app.jobs.tasks import update_stock_universe_cache, sync_stock_universe, another_task, print_stock_subscription_table, sync_stock_subscription
 from app.core.config import config
 import asyncio
 import atexit
@@ -26,9 +26,9 @@ def start_scheduler():
     
     # For running async functions
     scheduler.add_job(run_async_job, IntervalTrigger(hours=24), id="update_stock_universe_cache", replace_existing=True, args=[update_stock_universe_cache])
-    scheduler.add_job(run_async_job, IntervalTrigger(minutes=5), id="print_stock_subscription_table_task", replace_existing=True, args=[unsubscribe_stocks])
+    scheduler.add_job(run_async_job, IntervalTrigger(seconds=30), id="sync_stock_subscription", replace_existing=True, args=[sync_stock_subscription])
 
-    scheduler.add_job(run_async_job, IntervalTrigger(seconds=15), id="print_stock_subscription_table_task", replace_existing=True, args=[print_stock_subscription_table])
+    # scheduler.add_job(run_async_job, IntervalTrigger(seconds=15), id="print_stock_subscription_table_task", replace_existing=True, args=[print_stock_subscription_table])
 
     scheduler.start()
 

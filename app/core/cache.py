@@ -99,7 +99,7 @@ async def add_stock_to_stock_subscription_cache(stock_ticker: str):
         if not stock_check:
             try:
                 company_quote = await get_stock_quote(stock_ticker)
-                current_price = company_quote["c"] if company_quote else 0
+                current_price = round(company_quote["c"], 2) if company_quote else 0
             except:
                 current_price = 0
 

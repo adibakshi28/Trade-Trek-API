@@ -1,14 +1,13 @@
 import asyncio
 from app.models.database import supabase
 from app.utils.finnhub import get_stock_symbols, get_crypto_symbols, get_forex_symbols
-from app.core.cache import create_stock_universe_cache
+from app.core.cache import create_stock_universe_cache, remove_stock_from_stock_subscription_cache, add_stock_to_stock_subscription_cache
 from app.core.config import config
 from datetime import datetime
 from app.models.sqlite_cache import get_from_table
 
 def another_task():
     print(f"[SCHEDULED JOB] Cron Job dummy {datetime.now()}")
-
 
 async def print_stock_subscription_table():
     print(f"🔄 [SCHEDULED JOB] Starting Print Stock subscription cache table job ...")
@@ -17,10 +16,33 @@ async def print_stock_subscription_table():
     print(result)
     print(f"✅ [SCHEDULED JOB] Completed Print Stock subscription cache table job!")
 
-async def unsubscribe_stocks():
-    print(f"🔄 [SCHEDULED JOB] Starting Stock Unsubscription sync job ...")
-    # TODO: Fetch all active sessions users, Look at thier current portfolio. Make a set. Update Stock Subscription cache table to them
-    print(f"✅ [SCHEDULED JOB] Completed Stock Unsubscription sync job!")
+async def sync_stock_subscription(log = "SCHEDULED JOB"):
+    if log == "SCHEDULED JOB":
+        print(f"🔄 [SCHEDULED JOB] Starting Stock Subscription sync job ...")
+
+    STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("STOCK_SUBSCRIPTION_CACHE_TABLE")
+    subscribed_stocks = await get_from_table(STOCK_SUBSCRIPTION_CACHE_TABLE)
+    subscribed_stocks = [stock[0] for stock in subscribed_stocks]
+
+    active_user_id = supabase.table("Sessions").select("user_id").eq("is_active", True).execute()
+    active_user_id = [user["user_id"] for user in active_user_id.data]
+
+    active_stocks = set()
+    for user_id in active_user_id:
+        user_portfolio = supabase.table("Holdings").select("stock_ticker").eq("user_id", user_id).eq("is_active", True).execute()
+        user_portfolio = [stock["stock_ticker"] for stock in user_portfolio.data]
+        active_stocks.update(user_portfolio)
+
+    stocks_to_unsubscribe = set(subscribed_stocks) - active_stocks
+    for stock in stocks_to_unsubscribe:
+        await remove_stock_from_stock_subscription_cache(stock)
+
+    stocks_to_subscribe = active_stocks - set(subscribed_stocks)
+    for stock in stocks_to_subscribe:
+        await add_stock_to_stock_subscription_cache(stock)
+
+    if log == "SCHEDULED JOB":
+        print(f"✅ [SCHEDULED JOB] Completed Stock Subscription sync job!")
 
 async def update_stock_universe_cache():
     print(f"🔄 [SCHEDULED JOB] Starting Update Stock Universe sync job ...")

@@ -4,6 +4,7 @@ import json
 import yfinance as yf
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+from typing import List, Optional
 
 from app.core.config import config
 from app.models.database import supabase
@@ -12,31 +13,38 @@ from app.core.cache import create_stock_universe_cache, add_stock_to_stock_subsc
 from app.utils.finnhub import get_company_profile, get_company_news, get_basic_financials, get_stock_quote, get_historical_stock_data
 
 
-async def search_stock_service(ticker: str, top: int):
+async def search_stock_service(ticker: str, top: int, asset_type: Optional[str] = None):
     STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
     try:
         if not await check_table_exists(STOCK_UNIVERSE_CACHE_TABLE):
             await create_stock_universe_cache()
         
         query = f"""
-            SELECT stock_ticker, stock_name
+            SELECT stock_ticker, stock_name, asset_type
             FROM {STOCK_UNIVERSE_CACHE_TABLE}
             WHERE stock_ticker LIKE ?
-            LIMIT {top};
         """
-        ticker = ticker.upper()
-        params = (f"%{ticker}%",)
-        results = await execute_sql(query, params)
+        params = [f"%{ticker}%"]
+
+        if asset_type:
+            query += " AND asset_type = ?"
+            params.append(asset_type)
+        
+        query += f" LIMIT {top};"
+        
+        results = await execute_sql(query, tuple(params))
 
         stock_results = [
-            {"stock_ticker": row[0], "stock_name": row[1]} for row in results
+            {"stock_ticker": row[0], "stock_name": row[1], "asset_type": row[2]} 
+            for row in results
         ]
                 
         return stock_results
 
     except Exception as ex:
         raise ex
-    
+
+
 # TODO: Search for other historical price source other than yfinance
 async def stock_historical_service(ticker: str):
     STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
@@ -89,7 +97,7 @@ async def stock_info_service(ticker: str):
 
         ticker = ticker.upper()
         query = f"""
-            SELECT stock_ticker, stock_name
+            SELECT stock_ticker, stock_name, asset_type
             FROM {STOCK_UNIVERSE_CACHE_TABLE}
             WHERE stock_ticker = "{ticker}";
         """
@@ -102,22 +110,30 @@ async def stock_info_service(ticker: str):
                 detail="Stock not found"
             )
         
-        company_profile = await get_company_profile(ticker)
-
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        date_15_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-        company_news = await get_company_news(ticker, date_15_days_ago, current_date)
-
-        company_financials = await get_basic_financials(ticker, "all")
-
         company_quote = await get_stock_quote(ticker)
 
-        stock_data = {
-            "quote": company_quote,
-            "profile": company_profile,
-            "financials": company_financials.get('metric', {}),
-            "news": company_news,
-        }
+        if results[0][2] == "STOCK":
+            company_profile = await get_company_profile(ticker)
+
+            current_date = datetime.now().strftime('%Y-%m-%d')
+            date_15_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+            company_news = await get_company_news(ticker, date_15_days_ago, current_date)
+
+            company_financials = await get_basic_financials(ticker, "all")
+
+            stock_data = {
+                "asset_type": results[0][2],
+                "quote": company_quote,
+                "profile": company_profile,
+                "financials": company_financials.get('metric', {}),
+                "news": company_news,
+            }
+        
+        else:
+            stock_data = {
+                "asset_type": results[0][2],
+                "quote": company_quote,
+            }
 
         return stock_data
 
@@ -209,9 +225,16 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 detail="You have reached the maximum number of assets in your portfolio."
             )
 
-        # !: Fetch stock price
-        import random
-        price = int(random.uniform(1, 1000))
+        # !: Fetch stock price (from API)
+        price = await get_stock_quote(ticker)
+    
+        if not price:
+            raise HTTPException(
+                status_code=400,
+                detail="Stock price not available right now. Please try again later."
+            )
+        else:
+            price = round(price['c'], 2)
 
         # !: Check for sufficient cash balance (by calculating transaction value)
         cash = supabase.table("Cash").select("cash").eq("user_id", user_id).eq("is_active", True).execute()
@@ -250,7 +273,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 }
                 portfolioUpdateResponse = supabase.table("Holdings").update(portfolioUpdate).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                 cashUpdate = {
-                    "cash": cash - transaction_value
+                    "cash": round((cash - transaction_value),2)
                 }
                 cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                 transaction = {
@@ -272,7 +295,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 elif stock['quantity'] == quantity:
                     portfolioUpdateResponse = supabase.table("Holdings").update({"quantity": 0, "is_active": False}).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                     cashUpdate = {
-                        "cash": (cash + (stock['execution_price']*quantity)) + (stock['execution_price']*quantity) - transaction_value 
+                        "cash": round(((cash + (stock['execution_price']*quantity)) + (stock['execution_price']*quantity) - transaction_value), 2)
                     }
                     cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                     transaction = {
@@ -301,7 +324,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
             }
             portfolioInsertResponse = supabase.table("Holdings").insert(portfolioInsert).execute()
             cashUpdate = {
-                "cash": cash - transaction_value
+                "cash": round((cash - transaction_value),2)
             }
             cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
             transaction = {
@@ -325,7 +348,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 elif stock['quantity'] == quantity:
                     portfolioUpdateResponse = supabase.table("Holdings").update({"quantity": 0, "is_active": False}).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                     cashUpdate = {
-                        "cash": cash + transaction_value
+                        "cash": round((cash + transaction_value),2)
                     }
                     cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                     transaction = {
@@ -343,7 +366,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                     }
                     portfolioUpdateResponse = supabase.table("Holdings").update(portfolioUpdate).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                     cashUpdate = {
-                        "cash": cash + transaction_value
+                        "cash": round((cash + transaction_value),2)
                     }
                     cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                     transaction = {
@@ -362,7 +385,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 }
                 portfolioUpdateResponse = supabase.table("Holdings").update(portfolioUpdate).eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
                 cashUpdate = {
-                    "cash": cash - transaction_value
+                    "cash": round((cash - transaction_value),2)
                 }
                 cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                 transaction = {
@@ -392,7 +415,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 }
                 portfolioInsertResponse = supabase.table("Holdings").insert(portfolioInsert).execute()
                 cashUpdate = {
-                    "cash": cash - transaction_value
+                    "cash": round((cash - transaction_value),2)
                 }
                 cashUpdateResponse = supabase.table("Cash").update(cashUpdate).eq("user_id", user_id).eq("is_active", True).execute()
                 transaction = {

@@ -44,7 +44,7 @@ async def handle_finnhub_message(message: str):
         if data.get("type") == "trade":
             for trade in data.get("data", []):
                 symbol = trade.get("s")
-                price = trade.get("p")
+                price = round(trade.get("p"),2)
                 if symbol and price is not None:
                     await update_stock_ltp_in_cache(symbol, price)
     except json.JSONDecodeError:
