@@ -50,7 +50,7 @@ async def search_stock(ticker: str, payload: dict = Depends(require_active_sessi
             detail="Ticker parameter is required"
         )
 
-    stock = await search_stock_service(ticker, 5)
+    stock = await search_stock_service(ticker, 10)
     return stock
 
 @router.post("/transaction")

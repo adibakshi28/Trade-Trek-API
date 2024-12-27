@@ -37,6 +37,13 @@ async def get_stock_symbols(exchange: str) -> List[Dict[str, Any]]:
     """Get the list of supported stock symbols for an exchange."""
     return await make_request("stock/symbol", {"exchange": exchange})
 
+async def get_crypto_symbols(exchange: str) -> List[Dict[str, Any]]:
+    """Get the list of supported crypto symbols for an exchange."""
+    return await make_request("crypto/symbol", {"exchange": exchange})
+
+async def get_forex_symbols(exchange: str) -> List[Dict[str, Any]]:
+    """Get the list of supported forex symbols for an exchange."""
+    return await make_request("forex/symbol", {"exchange": exchange})
 
 async def get_market_status(exchange: str) -> Dict[str, Any]:
     """Get the current market status for an exchange."""

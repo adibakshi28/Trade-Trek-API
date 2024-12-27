@@ -61,6 +61,10 @@ TODO:
 ✅ 12) Max stocks in a portfolio (Config - maxAssetsAllowedinPortfolio = 10)
 13) Schedule job to invalidate session after 90 mins (from config) (And unsubscribe to stocks)
 14) invalidate_any_active_session() in startup check uncomment while deploying
+15) Run a job every 5 min to fetch all the active session user portfolios stocks and compare with stock subscription cache table and remove un-used stocks from it (Also add if any stock not already added) 
+✅ 16) When inititally adding stock to Stock Subscription cache table, instead of 0 ltp, fetch current price from API and add (Websocket dosent give price if market is not open)
+17) Think of a way to display name for crypto and forex (how to search) 
+18) How to transact in crypto and forex as ?stock api dosent work for them (FE page from Transaction BUY/SELL wont open)
 
 ? How to update portfolio value, Stock val in real time (maybe for logged in user) - (Maybe, keep a list of all the stocks in Stocks Table and update via websocker or API)
 (Maybe done by cron) (What frequency to update stock ltp if doing via api)

@@ -22,12 +22,12 @@ def register(first_name: str, last_name: str, email: str, username: str, passwor
     return {"message": "User registered successfully", "user_id": user["id"]}
 
 @router.post("/login")
-def login(email_or_username: str, password: str, request: Request):
+async def login(email_or_username: str, password: str, request: Request):
     """
     Login registered user (Create active session). Responds with JWT used for protected routes
     """
     ip_address: Optional[str] = request.client.host
-    token = login_user(email_or_username, password, ip_address=ip_address)
+    token = await login_user(email_or_username, password, ip_address=ip_address)
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

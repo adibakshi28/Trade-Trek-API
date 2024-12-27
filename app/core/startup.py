@@ -1,11 +1,13 @@
 import os
 import sys
 import requests
+import asyncio
 from fastapi import FastAPI
 from app.jobs.scheduler import start_scheduler
 from app.models.database import check_connection
 from app.models.sqlite_cache import init_db, check_db_mode
-from app.core.cache import create_stock_universe_cache
+from app.core.cache import create_stock_universe_cache, create_stock_subscription_cache
+from app.core.websocket import connect_to_finnhub
 from app.models.database import supabase
 from app.core.config import config
 
@@ -38,9 +40,12 @@ def validate_configuration(config: dict):
         "FINNHUB_WEBSOCKET_URL",
         "PASSWORD_ENCRYPTION_ALGORITHM",
         "ACCESS_TOKEN_EXPIRE_MINUTES",
-        "EXCHANGE",
+        "STOCK_EXCHANGE",
+        "CRYPTO_EXCHANGE",
+        "FOREX_EXCHANGE",
         "TIMEZONE",
         "STOCK_UNIVERSE_CACHE_TABLE",
+        "STOCK_SUBSCRIPTION_CACHE_TABLE",
         "INITIAL_CASH",
         "ALLOW_FRACTIONAL_SHARES",
         "FRACTIONAL_SHARES_MIN_TRADE",
@@ -141,10 +146,23 @@ async def initlize_in_memory_cache():
             print("⚠️  SQLite DB is not configured correctly - Not in-memory mode.")
 
         await create_stock_universe_cache()
+        await create_stock_subscription_cache()
 
         print("✅ SQLite cache initiated and created.")
     except Exception as e:
         print(f"❌ Failed to initialize SQLite cache: {e}")
+
+
+async def startup_finnhub_websocket_connection():
+    """
+    Connect to the Finnhub WebSocket.
+    """
+    try:
+        asyncio.create_task(connect_to_finnhub())
+        print("✅ Finnhub websocket connection initlized.")
+    except Exception as e:
+        print(f"❌ Failed to initialize Finnhub websocket connection: {e}")
+
      
 
 def register_startup_events(app: FastAPI):
@@ -163,6 +181,7 @@ def register_startup_events(app: FastAPI):
             validate_db_connection()
             # invalidate_any_active_session()
             await initlize_in_memory_cache()
+            await startup_finnhub_websocket_connection()
             print("🚀 All Startup Checks Passed Successfully!")
         except Exception as e:
             print(f"❌ Startup Check Failed: {e}")
