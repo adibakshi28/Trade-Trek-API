@@ -15,12 +15,12 @@ async def print_stock_subscription_table():
     STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("STOCK_SUBSCRIPTION_CACHE_TABLE")
     result = await get_from_table(STOCK_SUBSCRIPTION_CACHE_TABLE)
     print(result)
-    print(f"🔄 [SCHEDULED JOB] Completed Print Stock subscription cache table job!")
+    print(f"✅ [SCHEDULED JOB] Completed Print Stock subscription cache table job!")
 
 async def unsubscribe_stocks():
     print(f"🔄 [SCHEDULED JOB] Starting Stock Unsubscription sync job ...")
     # TODO: Fetch all active sessions users, Look at thier current portfolio. Make a set. Update Stock Subscription cache table to them
-    print(f"🔄 [SCHEDULED JOB] Completed Stock Unsubscription sync job!")
+    print(f"✅ [SCHEDULED JOB] Completed Stock Unsubscription sync job!")
 
 async def update_stock_universe_cache():
     print(f"🔄 [SCHEDULED JOB] Starting Update Stock Universe sync job ...")
