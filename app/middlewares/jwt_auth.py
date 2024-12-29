@@ -9,6 +9,21 @@ from app.models.database import supabase
 
 auth_scheme = HTTPBearer()
 
+def require_jwt_wb_auth(token: str) -> dict:
+    """
+    Verifies the JWT. Returns the decoded payload if valid. (This function is for WebSocket authentication ,requires a token as a string in arg)
+    """
+    try:
+        payload = decode_access_token(token)
+        if payload.get("user_id") is None:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+    return payload
+
 def require_jwt(credentials: HTTPAuthorizationCredentials = Depends(auth_scheme)) -> dict:
     """
     Verifies the JWT. Returns the decoded payload if valid.

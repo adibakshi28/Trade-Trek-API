@@ -23,4 +23,6 @@ config = {
     "ALLOW_SHORT_SELLING": True,
     "MAX_ASSETS_IN_PORTFOLIO": 10,
     "TRANSACTION_FEE": 0.0,
+    "FE_BE_WEBSOCKET_MSG_FREQUENCY": 1,        # Msg every x seconds
+    "NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY": "Number_Of_Active_Websockets_Cache",
 }

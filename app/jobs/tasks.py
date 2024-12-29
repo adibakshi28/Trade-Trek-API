@@ -1,10 +1,13 @@
 import asyncio
+import json
 from app.models.database import supabase
 from app.utils.finnhub import get_stock_symbols, get_crypto_symbols, get_forex_symbols
 from app.core.cache import create_stock_universe_cache, remove_stock_from_stock_subscription_cache, add_stock_to_stock_subscription_cache
 from app.core.config import config
 from datetime import datetime
-from app.models.sqlite_cache import get_from_table
+from app.models.sqlite_cache import get_from_table, get_cache
+from app.services.real_time_service import real_time_service
+
 
 def another_task():
     print(f"[SCHEDULED JOB] Cron Job dummy {datetime.now()}")
@@ -14,7 +17,30 @@ async def print_stock_subscription_table():
     STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("STOCK_SUBSCRIPTION_CACHE_TABLE")
     result = await get_from_table(STOCK_SUBSCRIPTION_CACHE_TABLE)
     print(result)
+
+    NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY = config['NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY']
+    active_websockets = await get_cache(NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY)
+    print(f"Active Websockets Connections: {active_websockets}")
+
     print(f"✅ [SCHEDULED JOB] Completed Print Stock subscription cache table job!")
+
+async def fe_be_websocket_msg_broadcast():
+    STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("STOCK_SUBSCRIPTION_CACHE_TABLE")
+    result = await get_from_table(STOCK_SUBSCRIPTION_CACHE_TABLE)
+    # Broadcast msg to frontend
+    message = []
+    for stock in result:
+        msg = {
+            "stock_ticker": stock[0],
+            "ltp": stock[1]
+        }
+        message.append(msg)
+    await real_time_service.broadcast(json.dumps(message))
+
+    # NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY = config['NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY']
+    # active_websockets = await get_cache(NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY)
+    # print(f"Active Websockets Connections: {active_websockets}")
+
 
 async def sync_stock_subscription(log = "SCHEDULED JOB"):
     if log == "SCHEDULED JOB":
