@@ -1,5 +1,4 @@
-# app/main.py
-
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 from app.routes import auth, users, stocks
 from app.core.exceptions import register_exception_handlers
@@ -9,10 +8,17 @@ from app import __version__, __author__
 
 app = FastAPI()
 
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Currently it is set to allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
+
 register_exception_handlers(app)
-
 register_startup_events(app)
-
 register_shutdown_events(app)
 
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])

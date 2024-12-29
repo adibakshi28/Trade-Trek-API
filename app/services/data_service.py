@@ -43,6 +43,35 @@ async def search_stock_service(ticker: str, top: int, asset_type: Optional[str] 
 
     except Exception as ex:
         raise ex
+    
+async def stock_quote_service (ticker: str):
+    STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
+    try:
+        if not await check_table_exists(STOCK_UNIVERSE_CACHE_TABLE):
+            await create_stock_universe_cache()
+
+        ticker = ticker.upper()
+        query = f"""
+            SELECT stock_ticker, stock_name
+            FROM {STOCK_UNIVERSE_CACHE_TABLE}
+            WHERE stock_ticker = "{ticker}";
+        """
+        params = ()
+        results = await execute_sql(query, params)
+
+        if not results:
+            raise HTTPException(
+                status_code=404,
+                detail="Stock not found"
+            )
+        
+        company_quote = await get_stock_quote(ticker)
+        company_quote['stock_ticker'] = ticker
+        company_quote['stock_name'] = results[0][1]
+        return company_quote
+
+    except Exception as ex:
+        raise ex
 
 
 # TODO: Search for other historical price source other than yfinance
@@ -119,6 +148,9 @@ async def stock_info_service(ticker: str):
             date_15_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
             company_news = await get_company_news(ticker, date_15_days_ago, current_date)
 
+            # TODO: Limit company_news to just 15 items in the list
+            company_news = company_news[:15] if company_news and len(company_news) > 15 else company_news
+
             company_financials = await get_basic_financials(ticker, "all")
 
             stock_data = {
@@ -146,6 +178,121 @@ async def stock_info_service(ticker: str):
         )
     
 
+async def stock_transaction_value_service(user_id: int, ticker: str, quantity: float, current_price: Optional[float] = None):
+    STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
+    ALLOW_FRACTIONAL_SHARES = config.get("ALLOW_FRACTIONAL_SHARES")
+    FRACTIONAL_SHARES_MIN_TRADE = config.get("FRACTIONAL_SHARES_MIN_TRADE")
+    ALLOW_SHORT_SELLING = config.get("ALLOW_SHORT_SELLING")
+    MAX_ASSETS_IN_PORTFOLIO = config.get("MAX_ASSETS_IN_PORTFOLIO")
+    TRANSACTION_FEE = config.get("TRANSACTION_FEE")
+    try:
+        response_result = {
+            "stock_ticker": ticker,
+            "quantity": quantity,
+            "price": current_price,
+            "transaction_fee": 0,
+            "required_funds_buy": 0,
+            "required_funds_sell": 0,
+            "buy_trade_possible": False,
+            "sell_trade_possible": False,
+        }
+                
+        if not await check_table_exists(STOCK_UNIVERSE_CACHE_TABLE):
+            await create_stock_universe_cache()
+
+        ticker = ticker.upper()
+        query = f"""
+            SELECT stock_ticker, stock_name, asset_type
+            FROM {STOCK_UNIVERSE_CACHE_TABLE}
+            WHERE stock_ticker = "{ticker}";
+        """
+        params = ()
+        results = await execute_sql(query, params)
+
+        if not results:
+            return response_result
+
+        if quantity <= 0:
+            return response_result
+
+        if not ALLOW_FRACTIONAL_SHARES and quantity % 1 != 0:
+            return response_result
+
+        if ALLOW_FRACTIONAL_SHARES and quantity < FRACTIONAL_SHARES_MIN_TRADE:
+            return response_result
+                
+        if not current_price:
+            current_price = await get_stock_quote(ticker)
+            current_price = current_price['c']
+
+        portfolio = supabase.table("Holdings").select("stock_ticker", "direction", "quantity", "execution_price").eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True).execute()
+        funds = supabase.table("Cash").select("cash").eq("user_id", user_id).eq("is_active", True).execute()
+        funds = funds.data[0]['cash'] if funds.data else 0
+
+        response_result["stock_ticker"] = ticker
+        response_result["quantity"] = quantity
+        response_result["price"] = current_price
+        response_result["transaction_fee"] = round((current_price * quantity), 2)*TRANSACTION_FEE
+        response_result["required_funds_buy"] = round((current_price * quantity), 2) + response_result["transaction_fee"]
+        response_result["required_funds_sell"] = round((current_price * quantity), 2) + response_result["transaction_fee"]
+        response_result["buy_trade_possible"] = False if funds < response_result["required_funds_buy"] else True
+        response_result["sell_trade_possible"] = False if funds < response_result["required_funds_sell"] else True
+
+        if portfolio.data and len(portfolio.data) > 0:
+            stock = portfolio.data[0]
+            if stock['direction'] == "SELL":
+                if stock['quantity'] != quantity:
+                    response_result["buy_trade_possible"] = False
+
+            else:
+                if stock['quantity'] < quantity:
+                    response_result["sell_trade_possible"] = False
+
+        else:
+            if not ALLOW_SHORT_SELLING:
+                response_result["sell_trade_possible"] = False
+
+        response_result["transaction_fee"] = 0 if not (response_result["buy_trade_possible"] and response_result["sell_trade_possible"]) else response_result["transaction_fee"]
+        response_result["buy_trade_possible"] = 0 if not response_result["buy_trade_possible"] else response_result["required_funds_buy"]
+        response_result["required_funds_sell"] = 0 if not response_result["sell_trade_possible"] else response_result["required_funds_sell"]
+
+            
+        return response_result
+    
+    except HTTPException as http_ex:
+        raise http_ex
+    except Exception as ex:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal Server Error: {str(ex)}"
+        )
+
+async def stock_universe_service():
+    STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
+    try:
+        if not await check_table_exists(STOCK_UNIVERSE_CACHE_TABLE):
+            await create_stock_universe_cache()
+
+        query = f"""
+            SELECT stock_ticker, stock_name, asset_type
+            FROM {STOCK_UNIVERSE_CACHE_TABLE};
+        """
+        params = ()
+        results = await execute_sql(query, params)
+
+        keys = ["stock_ticker", "stock_name", "asset_type"]
+        dict_results = [dict(zip(keys, row)) for row in results]
+
+        return dict_results
+
+    except HTTPException as http_ex:
+        raise http_ex
+    except Exception as ex:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal Server Error: {str(ex)}"
+        )
+    
 async def stock_transaction_service(user_id: int, ticker: str, direction: str, quantity: float):
     STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
     ALLOW_FRACTIONAL_SHARES = config.get("ALLOW_FRACTIONAL_SHARES")

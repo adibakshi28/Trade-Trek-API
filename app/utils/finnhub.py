@@ -4,6 +4,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from app.core.config import config, FINNHUB_API_KEY
 from typing import Dict, Any, List
+from httpx import RemoteProtocolError
 
 load_dotenv()
 
@@ -19,14 +20,23 @@ async def make_request(endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
     params["token"] = FINNHUB_API_KEY
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-            return response.json()
+        async with httpx.AsyncClient(http2=False, timeout=30) as client:
+            for attempt in range(3):
+                try:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    return response.json()
+                except (httpx.TimeoutException, RemoteProtocolError) as e:
+                    if attempt < 2:
+                        print(f"Retrying request due to {e} (Attempt {attempt + 1}/3)")
+                    else:
+                        raise ConnectionError(f"❌ Max retries exceeded: {e}")
     except httpx.TimeoutException:
         raise ConnectionError("❌ Finnhub API request timed out.")
     except httpx.HTTPStatusError as e:
         raise ConnectionError(f"❌ HTTP Error: {e}")
+    except RemoteProtocolError:
+        raise ConnectionError("❌ Remote Protocol Error: The server disconnected unexpectedly.")
     except httpx.RequestError as e:
         raise ConnectionError(f"❌ Error in API Request: {e}")
 

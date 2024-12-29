@@ -4,7 +4,10 @@ from typing import Optional, List, Dict, Any
 from postgrest import APIError
 
 from app.models.database import supabase
+from app.core.config import config
 from app.utils.finnhub import get_stock_quote
+from app.models.sqlite_cache import execute_sql
+from app.models.sqlite_cache import get_from_table
 
 def user_funds_service(user_id: int):
     try:
@@ -27,10 +30,38 @@ def user_transactions_service(user_id: int):
     except APIError as e:
         raise e
     
-def user_portfolio_service(user_id: int):
+async def user_portfolio_service(user_id: int):
     try:
-        response = supabase.table("Holdings").select("id", "user_id", "stock_ticker", "direction", "quantity", "execution_price", "created_at").eq("user_id", user_id).eq("is_active", True).execute()
-        return response.data or []
+        response = supabase.table("Holdings").select(
+            "id", "user_id", "stock_ticker", "direction", 
+            "quantity", "execution_price", "created_at"
+        ).eq("user_id", user_id).eq("is_active", True).execute()
+        
+        portfolio = response.data or []
+        
+        if not portfolio:
+            return portfolio
+
+        unique_tickers = list({p["stock_ticker"] for p in portfolio})
+        
+        STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
+        placeholders = ", ".join(["?"] * len(unique_tickers))
+        
+        query = f"""
+            SELECT stock_ticker, stock_name 
+            FROM {STOCK_UNIVERSE_CACHE_TABLE}
+            WHERE stock_ticker IN ({placeholders});
+        """
+        params = tuple(unique_tickers)
+        stock_results = await execute_sql(query, params)
+
+        stock_name_lookup = {row[0]: row[1] for row in stock_results}
+
+        for p in portfolio:
+            p["stock_name"] = stock_name_lookup.get(p["stock_ticker"], p["stock_ticker"])
+        
+        return portfolio
+
     except APIError as e:
         raise e
 
@@ -122,13 +153,17 @@ async def user_trade_summary_service(user_id: int):
         up = 0.0
         ib = 0.0
         ts = {}
+
+        STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("STOCK_SUBSCRIPTION_CACHE_TABLE")
+        res = await get_from_table(STOCK_SUBSCRIPTION_CACHE_TABLE)
+        stock_cache_dict = {row[0]: row[1] for row in res}
+
         for s, v in pos.items():
             q = v["qty"]
             a = v["avg"]
             r = v["realized"]
             try:
-                qt = await get_stock_quote(s)
-                cp = round(float(qt["c"]), 2)
+                cp = stock_cache_dict.get(s, 0.0)
             except:
                 cp = round(a, 2) if a > 0 else 0.0
             cv = q * cp

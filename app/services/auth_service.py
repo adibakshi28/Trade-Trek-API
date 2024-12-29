@@ -86,14 +86,14 @@ async def login_user(email_or_username: str, password: str, ip_address: Optional
             user_data = resp_user.data
 
         if not user_data:
-            return None
+            raise ValueError("User not found. Please register first.")
 
         user = user_data[0]
         if "password" not in user:
-            return None
+            raise ValueError("User password not found. Please try again later.")
 
         if not verify_password(password, user["password"]):
-            return None
+            raise ValueError("Incorrect password.")
 
         # Make old sessions inactive
         supabase.table("Sessions").update({"is_active": False}).eq("user_id", user["id"]).execute()
