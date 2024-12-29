@@ -27,25 +27,26 @@ async def authenticate_websocket(token: str):
 @router.websocket("/ws/realtime")
 async def websocket_endpoint(websocket: WebSocket, token: str):
     """
-    WebSocket endpoint for real-time updates (Protected via JWT in Headers)
+    WebSocket endpoint for real-time updates (Protected via JWT in Query Params)
     """
     try:
         # Authenticate WebSocket connection manually
         payload = await authenticate_websocket(token)
-        user_id = payload.get("user_id")
-        print(f"✅ WebSocket connection authenticated for user_id: {user_id}")
+        user_id = int(payload.get("user_id"))
+        # print(f"✅ WebSocket connection authenticated for user_id: {user_id}")
         
-        await real_time_service.connect(websocket)
+        await real_time_service.connect(websocket, user_id)
         
         try:
             while True:
-                await websocket.receive_text()
+                data = await websocket.receive_text()
+                print(f"📨 Received data from user_id {user_id}: {data}")
         except WebSocketDisconnect:
-            print(f"❌ WebSocket client disconnected (user_id: {user_id}).")
-            await real_time_service.disconnect(websocket)
+            # print(f"❌ WebSocket client disconnected (user_id: {user_id}).")
+            await real_time_service.disconnect(user_id)
         except Exception as e:
             print(f"⚠️ Error in WebSocket communication: {e}")
-            await real_time_service.disconnect(websocket)
+            await real_time_service.disconnect(user_id)
     
     except HTTPException as auth_error:
         print(f"❌ Authentication failed: {auth_error.detail}")
