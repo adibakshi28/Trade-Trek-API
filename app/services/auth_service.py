@@ -4,8 +4,10 @@ from typing import Optional, List, Dict
 from postgrest import APIError
 
 from app.models.database import supabase
+from app.core.config import config
 from app.utils.helpers import hash_password, verify_password
 from app.utils.token import create_access_token
+from app.core.cache import add_stock_to_stock_subscription_cache
 
 def register_user(first_name: str, last_name: str, email: str, username: str, password: str) -> Optional[Dict]:
     """
@@ -36,7 +38,20 @@ def register_user(first_name: str, last_name: str, email: str, username: str, pa
         response = supabase.table("Users").insert(data).execute()
         
         inserted = response.data or []
-        return inserted[0] if inserted else None
+    
+        if inserted:
+            id = inserted[0].get("id")
+
+            data = {
+                "user_id": id,
+                "cash": round(config['INITIAL_CASH'], 2),
+                "is_active": True,
+            }
+            response = supabase.table("Cash").insert(data).execute()
+
+            return inserted[0]
+        else:
+            return None
     
     except ValueError as ve:
         # Handle uniqueness errors
@@ -53,7 +68,7 @@ def register_user(first_name: str, last_name: str, email: str, username: str, pa
         # print("An unexpected error occurred:", str(ex))
         raise ex
     
-def login_user(email_or_username: str, password: str, ip_address: Optional[str] = None) -> Optional[str]:
+async def login_user(email_or_username: str, password: str, ip_address: Optional[str] = None) -> Optional[str]:
     """
     1. Find user by email or username
     2. Verify password
@@ -71,14 +86,14 @@ def login_user(email_or_username: str, password: str, ip_address: Optional[str] 
             user_data = resp_user.data
 
         if not user_data:
-            return None
+            raise ValueError("User not found. Please register first.")
 
         user = user_data[0]
         if "password" not in user:
-            return None
+            raise ValueError("User password not found. Please try again later.")
 
         if not verify_password(password, user["password"]):
-            return None
+            raise ValueError("Incorrect password.")
 
         # Make old sessions inactive
         supabase.table("Sessions").update({"is_active": False}).eq("user_id", user["id"]).execute()
@@ -99,6 +114,11 @@ def login_user(email_or_username: str, password: str, ip_address: Optional[str] 
             "ip_address": ip_address,
             "is_active": True
         }).execute()
+
+        # !: Adding user portfolio stocks into STOCK_SUBSCRIPTION_CACHE_TABLE SQLite cache table
+        user_portfolio_stocks = supabase.table("Holdings").select("stock_ticker").eq("user_id", user["id"]).eq("is_active", True).execute().data
+        for stock in user_portfolio_stocks:
+            await add_stock_to_stock_subscription_cache(stock['stock_ticker'])
 
         return access_token
     except APIError as e:

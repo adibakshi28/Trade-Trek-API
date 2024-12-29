@@ -1,9 +1,16 @@
 import os
 import sys
 import requests
+import asyncio
 from fastapi import FastAPI
+from app.jobs.scheduler import start_scheduler
 from app.models.database import check_connection
+from app.models.sqlite_cache import init_db, check_db_mode
+from app.core.cache import create_stock_universe_cache, create_stock_subscription_cache
+from app.core.websocket import connect_to_finnhub
+from app.models.database import supabase
 from app.core.config import config
+from app.jobs.tasks import sync_stock_subscription
 
 
 def validate_env_variables():
@@ -12,8 +19,6 @@ def validate_env_variables():
     """
     required_env_vars = [
         "SECRET_KEY",
-        "PASSWORD_ENCRYPTION_ALGORITHM",
-        "ACCESS_TOKEN_EXPIRE_MINUTES",
         "FINNHUB_API_KEY",
         "SUPABASE_URL",
         "SUPABASE_SERVICE_KEY",
@@ -22,7 +27,7 @@ def validate_env_variables():
     missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 
     if missing_vars:
-        raise EnvironmentError(f"❌ Missing environment variables: {', '.join(missing_vars)}")
+        raise EnvironmentError(f"Missing environment variables: {', '.join(missing_vars)}")
     print("✅ All required environment variables are set.")
 
 
@@ -34,15 +39,29 @@ def validate_configuration(config: dict):
     required_config_vars = [
         "FINNHUB_API_BASE_URL",
         "FINNHUB_WEBSOCKET_URL",
+        "PASSWORD_ENCRYPTION_ALGORITHM",
+        "ACCESS_TOKEN_EXPIRE_MINUTES",
+        "STOCK_EXCHANGE",
+        "CRYPTO_EXCHANGE",
+        "FOREX_EXCHANGE",
+        "TIMEZONE",
+        "STOCK_UNIVERSE_CACHE_TABLE",
+        "STOCK_SUBSCRIPTION_CACHE_TABLE",
+        "INITIAL_CASH",
+        "ALLOW_FRACTIONAL_SHARES",
+        "FRACTIONAL_SHARES_MIN_TRADE",
+        "ALLOW_SHORT_SELLING",
+        "MAX_ASSETS_IN_PORTFOLIO",
+        "TRANSACTION_FEE",
     ]
 
     missing_vars = [
         var for var in required_config_vars 
-        if var not in config or not config.get(var)
+        if var not in config or config[var] is None
     ]
 
     if missing_vars:
-        raise EnvironmentError(f"❌ Missing or empty configuration values: {', '.join(missing_vars)}")
+        raise EnvironmentError(f"Missing or empty configuration values: {', '.join(missing_vars)}")
     
     print("✅ All required configurations are set and valid.")
 
@@ -54,11 +73,11 @@ def check_third_party_services(config: dict):
     """
     finnhub_api_key = os.getenv("FINNHUB_API_KEY")
     if not finnhub_api_key:
-        raise ValueError("❌ FINNHUB_API_KEY is missing in environment variables.")
+        raise ValueError("FINNHUB_API_KEY is missing in environment variables.")
     
     finnhub_base_url = config.get("FINNHUB_API_BASE_URL")
     if not finnhub_base_url:
-        raise ValueError("❌ FINNHUB_API_BASE_URL is missing in config.")
+        raise ValueError("FINNHUB_API_BASE_URL is missing in config.")
     
     try:
         response = requests.get(
@@ -72,31 +91,87 @@ def check_third_party_services(config: dict):
             print("⚠️ Failed to parse JSON from Finnhub API response.")
         
         if response.status_code != 200:
-            raise ConnectionError(f"❌ API returned status code {response.status_code}: {response.text}")
+            raise ConnectionError(f"API returned status code {response.status_code}: {response.text}")
         print("✅ Finnhub API is reachable.")
     
     except requests.Timeout:
-        raise ConnectionError("❌ Finnhub API connection timed out.")
+        raise ConnectionError("Finnhub API connection timed out.")
     
     except requests.ConnectionError as e:
-        raise ConnectionError(f"❌ Error connecting to Finnhub API: {e}")
+        raise ConnectionError(f"Error connecting to Finnhub API: {e}")
     
     except Exception as e:
-        raise Exception(f"❌ Unexpected error: {e}")
-
-    
-    # TODO -> Check for finnhub websocket connection
+        raise Exception(f"Unexpected error while checking Finnhub API connection: {e}")
     
 
 def validate_db_connection():
     """
     Check DB connection
     """
-
     if check_connection():
         print("✅ Connected to Supabase DB.")
     else:
-        raise ConnectionError("❌ Could NOT connect to Supabase DB. Check your SUPABASE_URL / SERVICE_KEY.")
+        raise ConnectionError("Could NOT connect to Supabase DB. Check your SUPABASE_URL / SERVICE_KEY.")
+    
+
+def invalidate_any_active_session():
+    """
+    Invalidate any active user session
+    """
+    try:
+        supabase.table("Sessions").update({"is_active": False}).eq("is_active", True).execute()
+        print("✅ All active user sessions invalidated.")
+    except Exception as e:
+        raise Exception(f"Unexpected error while invalidating sessions: {e}")
+    
+
+async def initlize_in_memory_cache():
+    """
+    Initialize the SQLite in-memory cache and create cached tables.
+    """
+    try:
+        await init_db()
+
+        inMemoryDBConfig = await check_db_mode()
+
+        if (
+            inMemoryDBConfig['journal_mode'] != 'memory' or
+            len(inMemoryDBConfig['database_list']) == 0 or
+            inMemoryDBConfig['database_list'][0][0] != 0 or
+            inMemoryDBConfig['database_list'][0][1] != 'main' or
+            inMemoryDBConfig['database_list'][0][2] != ''
+        ):
+            print("⚠️  SQLite DB is not configured correctly - Not in-memory mode.")
+
+        await create_stock_universe_cache()
+        await create_stock_subscription_cache()
+
+        print("✅ SQLite cache initiated and created.")
+    except Exception as e:
+        print(f"❌ Failed to initialize SQLite cache: {e}")
+
+
+async def startup_finnhub_websocket_connection():
+    """
+    Connect to the Finnhub WebSocket.
+    """
+    try:
+        asyncio.create_task(connect_to_finnhub())
+        print("✅ Finnhub websocket connection initlized.")
+    except Exception as e:
+        print(f"❌ Failed to initialize Finnhub websocket connection: {e}")
+
+
+async def startup_sync_stock_subscription():
+    """
+    Sync stock subscription cache
+    """
+    try:
+        await sync_stock_subscription("")
+        print("✅ Stock subscription cache synced.")
+    except Exception as e:
+        print(f"❌ Failed to sync stock subacription cache: {e}")
+
      
 
 def register_startup_events(app: FastAPI):
@@ -105,14 +180,25 @@ def register_startup_events(app: FastAPI):
     """
 
     @app.on_event("startup")
-    def startup_checks():
+    async def startup_events():
+
         print("🚀 Running Startup Checks...")
         try:
             validate_env_variables()
             validate_configuration(config=config)
             check_third_party_services(config=config)
             validate_db_connection()
+            # invalidate_any_active_session()
+            await initlize_in_memory_cache()
+            await startup_finnhub_websocket_connection()
+            await startup_sync_stock_subscription()
             print("🚀 All Startup Checks Passed Successfully!")
         except Exception as e:
             print(f"❌ Startup Check Failed: {e}")
             os._exit(1)
+
+        try:
+            start_scheduler()
+            print("✅ Scheduled jobs setup complete.")
+        except Exception as e:
+            print(f"❌ Failed to setup scheduled jobs: {e}")

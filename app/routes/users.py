@@ -4,15 +4,55 @@ from fastapi import APIRouter, Depends
 from typing import List, Dict
 
 from app.middlewares.jwt_auth import require_active_session
-from app.services.user_service import get_all_users
+from app.services.user_service import user_transactions_service, user_funds_service, user_info_service, user_portfolio_service, user_trade_summary_service
 
 router = APIRouter()
 
-@router.get("/all")
-def list_all_users(payload: dict = Depends(require_active_session)) -> List[Dict]:
+@router.get("/")
+def get_user_info(payload: dict = Depends(require_active_session)) -> Dict:
     """
-    Protected route requiring an active session.
-    If the user doesn't have an active session in the DB, they get 401.
+    Returns information about a specific user
     """
-    users = get_all_users()
-    return users
+    user_id = payload.get("user_id")
+    user = user_info_service(user_id)
+    return user
+
+@router.get("/transactions")
+def get_user_transactions(payload: dict = Depends(require_active_session)) -> List[Dict]:
+    """
+    Return all user transactions
+    """
+    user_id = payload.get("user_id")
+    transactions = user_transactions_service(user_id)
+    return transactions
+
+@router.get("/portfolio")
+async def get_user_portfolio(payload: dict = Depends(require_active_session)) -> List[Dict]:
+    """
+    Return all user transactions
+    """
+    user_id = payload.get("user_id")
+    portfolio = await user_portfolio_service(user_id)
+    return portfolio
+
+@router.get("/funds")
+def get_user_funds(payload: dict = Depends(require_active_session)) -> Dict:
+    """
+    Return available funds for the user
+    """
+    user_id = payload.get("user_id")
+    funds = user_funds_service(user_id)
+    return funds
+
+
+@router.get("/summary")
+async def get_user_trade_summary(payload: dict = Depends(require_active_session)) -> Dict:
+    """
+    Returns the users trade summary with statistics
+    """
+    user_id = payload.get("user_id")
+    summary = await user_trade_summary_service(user_id)
+    return summary
+
+
+
