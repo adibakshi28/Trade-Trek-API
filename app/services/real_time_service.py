@@ -31,7 +31,7 @@ class RealTimeService:
 
         await websocket.accept()
         self.active_connections[user_id] = websocket
-        print(f"🔗 User {user_id} connected. Total active users: {len(self.active_connections)}")
+        print(f"🔗 User {user_id} connected. Total active connections: {len(self.active_connections)}")
         await set_cache(NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY, len(self.active_connections))
 
     async def disconnect(self, user_id: int):
@@ -48,7 +48,7 @@ class RealTimeService:
                 del self.active_connections[user_id]
                 self.message_count.pop(user_id, None)
                 self.last_message_time.pop(user_id, None)
-                print(f"🔨 User {user_id} disconnected. Total active users: {len(self.active_connections)}")
+                print(f"🔨 User {user_id} disconnected. Total active connections: {len(self.active_connections)}")
                 await set_cache(NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY, len(self.active_connections))
 
 
