@@ -10,8 +10,6 @@ from app.core.cache import create_stock_universe_cache, create_stock_subscriptio
 from app.core.websocket import connect_to_finnhub
 from app.models.database import supabase
 from app.core.config import config
-from app.jobs.tasks import sync_stock_subscription
-
 
 def validate_env_variables():
     """
@@ -55,6 +53,7 @@ def validate_configuration(config: dict):
         "TRANSACTION_FEE",
         "NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY",
         "FE_BE_WEBSOCKET_MSG_FREQUENCY",
+        "FINNHUB_WEBSOCKET_MSG_FREQUENCY"
     ]
 
     missing_vars = [
@@ -165,18 +164,6 @@ async def startup_finnhub_websocket_connection():
         print(f"❌ Failed to initialize Finnhub websocket connection: {e}")
 
 
-async def startup_sync_stock_subscription():
-    """
-    Sync stock subscription cache
-    """
-    try:
-        await sync_stock_subscription("")
-        print("✅ Stock subscription cache synced.")
-    except Exception as e:
-        print(f"❌ Failed to sync stock subacription cache: {e}")
-
-     
-
 def register_startup_events(app: FastAPI):
     """
     Register all startup-related events to the app.
@@ -194,12 +181,10 @@ def register_startup_events(app: FastAPI):
             # invalidate_any_active_session()
             await initlize_in_memory_cache()
             await startup_finnhub_websocket_connection()
-            await startup_sync_stock_subscription()
             print("🚀 All Startup Checks Passed Successfully!")
         except Exception as e:
             print(f"❌ Startup Check Failed: {e}")
             os._exit(1)
-
         try:
             start_scheduler()
             print("✅ Scheduled jobs setup complete.")
