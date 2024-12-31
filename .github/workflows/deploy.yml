@@ -38,15 +38,6 @@ jobs:
           host: 18.189.118.160
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          sync: false        # <--- Tells action not to wait for background process
-          script_stop: false # <--- Prevents non-zero exit codes from failing step
           script: |
-            cd /home/ec2-user/Mock-Trader-API
-
-            # Kill existing uvicorn process (ignore error if none found)
-            sudo pkill -f "uvicorn" || true
-
-            # Start uvicorn server again in background
-            nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > output.log 2>&1 &
-
-            echo "Uvicorn server started!"
+            sudo systemctl restart my-fastapi.service
+            sudo systemctl status my-fastapi.service --no-pager
