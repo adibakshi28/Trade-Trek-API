@@ -2,12 +2,13 @@
 
 import asyncio
 import json
+import time
 from typing import Set
 
 import websockets
 from fastapi import APIRouter
 from app.core.config import config, FINNHUB_API_KEY
-from app.core.cache import update_stock_ltp_in_cache
+from app.core.cache import bulk_update_stock_ltp_in_cache
 
 router = APIRouter()
 
@@ -16,6 +17,9 @@ FINNHUB_WS_URL = f"{FINNHUB_WEBSOCKET_URL}?token={FINNHUB_API_KEY}"
 
 subscribed_symbols: Set[str] = set()
 finnhub_ws = None
+
+FINNHUB_WEBSOCKET_MSG_FREQUENCY = config['FINNHUB_WEBSOCKET_MSG_FREQUENCY']
+last_update_time = 0  
 
 async def connect_to_finnhub():
     global finnhub_ws
@@ -39,18 +43,32 @@ async def connect_to_finnhub():
             await asyncio.sleep(10)
 
 async def handle_finnhub_message(message: str):
+    global last_update_time
+    current_time = time.time()
+
     try:
         data = json.loads(message)
+
+        # Enforce global time limit
+        if current_time - last_update_time < FINNHUB_WEBSOCKET_MSG_FREQUENCY:
+            return
+
         if data.get("type") == "trade":
+            updates = []
             for trade in data.get("data", []):
                 symbol = trade.get("s")
-                price = round(trade.get("p"),2)
+                price = trade.get("p")
                 if symbol and price is not None:
-                    await update_stock_ltp_in_cache(symbol, price)
+                    updates.append((round(price, 2), symbol))
+            
+            if updates:
+                await bulk_update_stock_ltp_in_cache(updates)
+                last_update_time = current_time
+
     except json.JSONDecodeError:
-        print("Received non-JSON message from Finnhub.")
+        print("❌ Received non-JSON message from Finnhub.")
     except Exception as ex:
-        print(f"Error handling Finnhub message: {ex}")
+        print(f"❌ Error handling Finnhub message: {ex}")
 
 async def subscribe_existing_symbols():
     for symbol in subscribed_symbols:

@@ -55,4 +55,18 @@ async def get_user_trade_summary(payload: dict = Depends(require_active_session)
     return summary
 
 
+@router.get("/dashboard")
+async def get_user_dashboard(payload: dict = Depends(require_active_session)) -> Dict:
+    """
+    Returns the integrated infor required for the user dashboard
+    """
+    user_id = payload.get("user_id")
+    portfolio = await user_portfolio_service(user_id)
+    funds = user_funds_service(user_id)
+    response = {
+        "portfolio": portfolio,
+        "funds": funds,
+    }
+    return response
+
 

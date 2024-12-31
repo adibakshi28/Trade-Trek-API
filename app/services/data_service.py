@@ -9,7 +9,7 @@ from typing import List, Optional
 from app.core.config import config
 from app.models.database import supabase
 from app.models.sqlite_cache import execute_sql, check_table_exists
-from app.core.cache import create_stock_universe_cache, add_stock_to_stock_subscription_cache
+from app.core.cache import create_stock_universe_cache
 from app.utils.finnhub import get_company_profile, get_company_news, get_basic_financials, get_stock_quote, get_historical_stock_data
 
 
@@ -583,9 +583,6 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                     "is_active": True
                 }
                 transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
-
-        # !: Add stock to the stock subscription cache table
-        await add_stock_to_stock_subscription_cache(ticker)
 
         # !: Return transaction details, updated portfolio, and cash balance
         currentCash = supabase.table("Cash").select("cash").eq("user_id", user_id).eq("is_active", True).execute()

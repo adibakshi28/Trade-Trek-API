@@ -7,7 +7,6 @@ from app.models.database import supabase
 from app.core.config import config
 from app.utils.helpers import hash_password, verify_password
 from app.utils.token import create_access_token
-from app.core.cache import add_stock_to_stock_subscription_cache
 
 def register_user(first_name: str, last_name: str, email: str, username: str, password: str) -> Optional[Dict]:
     """
@@ -114,11 +113,6 @@ async def login_user(email_or_username: str, password: str, ip_address: Optional
             "ip_address": ip_address,
             "is_active": True
         }).execute()
-
-        # !: Adding user portfolio stocks into STOCK_SUBSCRIPTION_CACHE_TABLE SQLite cache table
-        user_portfolio_stocks = supabase.table("Holdings").select("stock_ticker").eq("user_id", user["id"]).eq("is_active", True).execute().data
-        for stock in user_portfolio_stocks:
-            await add_stock_to_stock_subscription_cache(stock['stock_ticker'])
 
         return access_token
     except APIError as e:

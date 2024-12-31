@@ -5,13 +5,11 @@ import asyncio
 from fastapi import FastAPI
 from app.jobs.scheduler import start_scheduler
 from app.models.database import check_connection
-from app.models.sqlite_cache import init_db, check_db_mode
+from app.models.sqlite_cache import init_db, check_db_mode, set_cache
 from app.core.cache import create_stock_universe_cache, create_stock_subscription_cache
 from app.core.websocket import connect_to_finnhub
 from app.models.database import supabase
 from app.core.config import config
-from app.jobs.tasks import sync_stock_subscription
-
 
 def validate_env_variables():
     """
@@ -53,6 +51,9 @@ def validate_configuration(config: dict):
         "ALLOW_SHORT_SELLING",
         "MAX_ASSETS_IN_PORTFOLIO",
         "TRANSACTION_FEE",
+        "NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY",
+        "FE_BE_WEBSOCKET_MSG_FREQUENCY",
+        "FINNHUB_WEBSOCKET_MSG_FREQUENCY"
     ]
 
     missing_vars = [
@@ -145,6 +146,7 @@ async def initlize_in_memory_cache():
 
         await create_stock_universe_cache()
         await create_stock_subscription_cache()
+        await set_cache(config['NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY'], 0)
 
         print("✅ SQLite cache initiated and created.")
     except Exception as e:
@@ -161,18 +163,6 @@ async def startup_finnhub_websocket_connection():
     except Exception as e:
         print(f"❌ Failed to initialize Finnhub websocket connection: {e}")
 
-
-async def startup_sync_stock_subscription():
-    """
-    Sync stock subscription cache
-    """
-    try:
-        await sync_stock_subscription("")
-        print("✅ Stock subscription cache synced.")
-    except Exception as e:
-        print(f"❌ Failed to sync stock subacription cache: {e}")
-
-     
 
 def register_startup_events(app: FastAPI):
     """
@@ -191,12 +181,10 @@ def register_startup_events(app: FastAPI):
             # invalidate_any_active_session()
             await initlize_in_memory_cache()
             await startup_finnhub_websocket_connection()
-            await startup_sync_stock_subscription()
             print("🚀 All Startup Checks Passed Successfully!")
         except Exception as e:
             print(f"❌ Startup Check Failed: {e}")
             os._exit(1)
-
         try:
             start_scheduler()
             print("✅ Scheduled jobs setup complete.")
