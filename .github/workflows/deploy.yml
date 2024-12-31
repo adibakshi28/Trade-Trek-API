@@ -39,14 +39,30 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e  # Exit on any error
             cd /home/ec2-user/Mock-Trader-API
+
             echo "Stopping existing Uvicorn service..."
-            pkill -f "uvicorn" || true  # Ignore errors if no process is running
+            # Graceful shutdown with timeout
+            pkill -15 -f "uvicorn" || true
+            sleep 5  # Give Uvicorn time to stop
+
+            echo "Ensuring no stale Uvicorn processes remain..."
+            pkill -9 -f "uvicorn" || true
+
             echo "Starting Uvicorn service..."
             nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > output.log 2>&1 &
+
             echo "Detaching process from terminal..."
             disown
+
             echo "Waiting for service to stabilize..."
             sleep 5
+
             echo "Verifying Uvicorn service..."
-            pgrep -f "uvicorn" && echo "✅ Uvicorn started successfully!" || { echo "❌ Failed to start Uvicorn!"; exit 1; }
+            if pgrep -f "uvicorn"; then
+              echo "✅ Uvicorn started successfully!"
+            else
+              echo "❌ Failed to start Uvicorn!"
+              exit 1
+            fi
