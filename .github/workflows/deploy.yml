@@ -1,0 +1,46 @@
+name: Deploy Backend to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Deploy to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: 18.189.118.160
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "."
+          target: "/home/ec2-user/Mock-Trader-API"
+          strip_components: 1
+
+      - name: Restart Backend Service
+        uses: appleboy/ssh-action@master
+        with:
+          host: 18.189.118.160
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ec2-user/Mock-Trader-API
+            # Kill existing uvicorn process if running
+            sudo pkill -f "uvicorn"
+            # Start uvicorn server again
+            nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > output.log 2>&1 &
