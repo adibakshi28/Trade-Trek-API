@@ -40,9 +40,10 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/ec2-user/Mock-Trader-API
-            # Kill existing uvicorn process if running
-            sudo pkill -f "uvicorn"
-            # Start uvicorn server again
-            nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > output.log 2>&1 &
+            
+            # Ensure previous uvicorn processes are stopped
+            sudo pkill -f "uvicorn" || echo "No existing uvicorn processes found"
 
-      
+            # Start uvicorn with nohup and disown
+            nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > output.log 2>&1 &
+            disown
