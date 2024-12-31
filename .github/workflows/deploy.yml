@@ -40,8 +40,13 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/ec2-user/Mock-Trader-API
-            pkill -f "uvicorn" || true  # Ensure previous instances are killed
+            echo "Stopping existing Uvicorn service..."
+            pkill -f "uvicorn" || true  # Ignore errors if no process is running
+            echo "Starting Uvicorn service..."
             nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > output.log 2>&1 &
-            disown  # Detach process from SSH session
-            sleep 5  # Give some time for the service to start
-            pgrep -f "uvicorn" || { echo "Failed to start FastAPI"; exit 1; }
+            echo "Detaching process from terminal..."
+            disown
+            echo "Waiting for service to stabilize..."
+            sleep 5
+            echo "Verifying Uvicorn service..."
+            pgrep -f "uvicorn" && echo "✅ Uvicorn started successfully!" || { echo "❌ Failed to start Uvicorn!"; exit 1; }
