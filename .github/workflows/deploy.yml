@@ -42,5 +42,6 @@ jobs:
             cd /home/ec2-user/Mock-Trader-API
             pkill -f "uvicorn" || true  # Ensure previous instances are killed
             nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > output.log 2>&1 &
+            disown  # Detach process from SSH session
             sleep 5  # Give some time for the service to start
             pgrep -f "uvicorn" || { echo "Failed to start FastAPI"; exit 1; }
