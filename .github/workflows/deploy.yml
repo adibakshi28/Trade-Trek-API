@@ -42,13 +42,26 @@ jobs:
             set -e  # Exit on any error
             cd /home/ec2-user/Mock-Trader-API
 
-            echo "Stopping existing Uvicorn service..."
-            # Graceful shutdown with timeout
-            pkill -15 -f "uvicorn" || true
-            sleep 5  # Give Uvicorn time to stop
+            echo "Checking for existing Uvicorn service..."
+            if pgrep -f "uvicorn"; then
+              echo "Stopping Uvicorn service gracefully..."
+              pkill -15 -f "uvicorn"
+              sleep 10  # Give Uvicorn time to clean up
+              if pgrep -f "uvicorn"; then
+                echo "Forcefully killing stale Uvicorn processes..."
+                pkill -9 -f "uvicorn"
+                sleep 3
+              fi
+            else
+              echo "No existing Uvicorn process found."
+            fi
 
-            echo "Ensuring no stale Uvicorn processes remain..."
-            pkill -9 -f "uvicorn" || true
+            echo "Ensuring the port 8000 is free..."
+            if lsof -i :8000; then
+              echo "Port 8000 is still in use. Forcing release..."
+              fuser -k 8000/tcp
+              sleep 3
+            fi
 
             echo "Starting Uvicorn service..."
             nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > output.log 2>&1 &
@@ -64,5 +77,21 @@ jobs:
               echo "✅ Uvicorn started successfully!"
             else
               echo "❌ Failed to start Uvicorn!"
+              cat output.log
+              exit 1
+            fi
+
+      - name: Verify Application Status
+        uses: appleboy/ssh-action@master
+        with:
+          host: 18.189.118.160
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "Checking Uvicorn service port..."
+            if curl -s http://127.0.0.1:8000/health; then
+              echo "✅ Backend health check passed!"
+            else
+              echo "❌ Backend health check failed!"
               exit 1
             fi
