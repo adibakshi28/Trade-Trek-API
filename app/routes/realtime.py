@@ -42,7 +42,7 @@ async def authenticate_websocket(token: str):
         )
 
 
-@router.websocket("/ws/ws/realtime")
+@router.websocket("/ws/realtime")
 async def websocket_endpoint(websocket: WebSocket, token: str):
     """
     WebSocket endpoint for real-time updates (Protected via JWT in Query Params)
