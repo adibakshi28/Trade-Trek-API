@@ -10,18 +10,36 @@ async def authenticate_websocket(token: str):
     """
     Validate JWT token passed as a query parameter during WebSocket connection.
     """
+    print("🔍 [authenticate_websocket] Token received:", token)
+    
     if not token:
+        print("❌ [authenticate_websocket] Missing or invalid token in query parameters")
         raise HTTPException(
             status_code=401,
             detail="Missing or invalid token in query parameters"
         )
+    
     try:
+        print("🔑 [authenticate_websocket] Validating JWT token...")
         payload = require_jwt_wb_auth(token)  # Validate JWT token
+        print("✅ [authenticate_websocket] JWT token validated. Payload:", payload)
+        
+        print("🛡️ [authenticate_websocket] Checking active session in DB...")
         payload = require_active_session(payload)  # Ensure active session in DB
+        print("✅ [authenticate_websocket] Active session verified. Payload:", payload)
+        
         return payload
+    
     except HTTPException as auth_error:
-        print(f"❌ Authentication failed: {auth_error.detail}")
+        print(f"❌ [authenticate_websocket] Authentication failed: {auth_error.detail}")
         raise auth_error
+    
+    except Exception as e:
+        print(f"⚠️ [authenticate_websocket] Unexpected error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error during authentication"
+        )
 
 
 @router.websocket("/ws/realtime")
