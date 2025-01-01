@@ -130,3 +130,65 @@ API for fetching real time price will only be used for indivudial stock page
 Overcomming 50 stock subscriptions/websocket connection.
 -> Check we we can create multiple wb connections (With a single free tier Finnhub account)
 -> If multiple websocket connects are not abllowed the add in more API keys (Fake accounts) and use them for other wb connections
+
+
+
+
+> Deployment
+
+
+API can be accessed on
+http://18.189.118.160:8000/
+
+(It has associated Elastic IP) (It will only be charged $0.0005/hr if the Elastic IP is unattached to any instance or the EC2 associated is stopped - So dont stop unless necessary)
+
+(With Elastic IP the Public IP remains constant on EC2 Start-Stop)
+
+(Stopping and Starting the EC2 will not automatically restart the FastAPI backend, have to manually restart using command below)
+
+(GitHub action is configured so pushing to main branch will automatically deploy on EC2 (and restart the Fast API backend service)
+- Note: Will have to manually put the .env file if changed, with the scp command to transfer .env file from local system to EC2)
+> scp -i "C:\Users\Aditya\Desktop\Personal\Mock Trader\AWS\MockTrader.pem" .env ec2-user@ec2-3-145-183-204.us-east-2.compute.amazonaws.com:/home/ec2-user/Mock-Trader-API/
+
+
+
+
+Deployment with GitHub actions on EC2
+
+Created a systemd service file (my-fastapi.service) that manages the lifecycle of your FastAPI application.
+(systemd manages processes independently of your SSH session, so it will run irrespective of SSH is connected or not (Just have to keep the EC2 instance on and it will work on its start))
+
+
+
+[Unit]
+Description=FastAPI Application
+After=network.target
+
+[Service]
+User=ec2-user
+WorkingDirectory=/home/ec2-user/Mock-Trader-API
+ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+
+- Service Management Commands
+	
+sudo systemctl daemon-reload			-> Reloads systemd to recognize new/updated service files.
+sudo systemctl enable my-fastapi.service	->Enables the service to start at boot.
+sudo systemctl start my-fastapi.service		->Starts the service manually.
+sudo systemctl stop my-fastapi.service		->Stops the service.
+sudo systemctl restart my-fastapi.service	->Restarts the service.
+sudo systemctl status my-fastapi.service	->Shows the current status of the service.
+
+- Monitoring Logs
+
+sudo journalctl -u my-fastapi.service		->Shows the service logs.
+sudo journalctl -u my-fastapi.service -f	->Tails the logs in real-time.
+sudo journalctl -u my-fastapi.service --since "1 hour ago"	->Shows logs from the last hour.
+sudo journalctl -u my-fastapi.service --no-pager		->Displays logs without pagination.
