@@ -20,6 +20,7 @@ def validate_env_variables():
         "FINNHUB_API_KEY",
         "SUPABASE_URL",
         "SUPABASE_SERVICE_KEY",
+        "TWELVE_DATA_API_KEY",
     ]
 
     missing_vars = [var for var in required_env_vars if not os.getenv(var)]
@@ -53,7 +54,8 @@ def validate_configuration(config: dict):
         "TRANSACTION_FEE",
         "NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY",
         "FE_BE_WEBSOCKET_MSG_FREQUENCY",
-        "FINNHUB_WEBSOCKET_MSG_FREQUENCY"
+        "FINNHUB_WEBSOCKET_MSG_FREQUENCY",
+        "TWELVE_DATA_BASE_URL"
     ]
 
     missing_vars = [
@@ -178,9 +180,9 @@ def register_startup_events(app: FastAPI):
             validate_configuration(config=config)
             check_third_party_services(config=config)
             validate_db_connection()
-            # invalidate_any_active_session()
+            invalidate_any_active_session()                   # Uncomment this line when pushing to production
             await initlize_in_memory_cache()
-            await startup_finnhub_websocket_connection()
+            await startup_finnhub_websocket_connection()      # Uncomment this line when pushing to production
             print("🚀 All Startup Checks Passed Successfully!")
         except Exception as e:
             print(f"❌ Startup Check Failed: {e}")

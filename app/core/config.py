@@ -5,12 +5,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 
 config = {
     "FINNHUB_API_BASE_URL": "https://finnhub.io/api/v1/",
     "FINNHUB_WEBSOCKET_URL": "wss://ws.finnhub.io",
     "PASSWORD_ENCRYPTION_ALGORITHM": "HS256",
-    "ACCESS_TOKEN_EXPIRE_MINUTES": 90,
+    "ACCESS_TOKEN_EXPIRE_MINUTES": 99999999,
     "STOCK_EXCHANGE": "US",
     "CRYPTO_EXCHANGE": "Binance",
     "FOREX_EXCHANGE": "fxcm",
@@ -26,4 +27,5 @@ config = {
     "FE_BE_WEBSOCKET_MSG_FREQUENCY": 1,        # Msg every x seconds
     "FINNHUB_WEBSOCKET_MSG_FREQUENCY": 0.5,   # LTP update from Finnhub every x seconds
     "NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY": "Number_Of_Active_Websockets_Cache",
+    "TWELVE_DATA_BASE_URL": "https://api.twelvedata.com/"
 }

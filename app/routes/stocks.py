@@ -25,7 +25,7 @@ async def get_stock_info(ticker: str, payload: dict = Depends(require_active_ses
 
 
 @router.get("/historical")
-async def get_stock_info(ticker: str, payload: dict = Depends(require_active_session)):
+async def get_stock_info(ticker: str, start_date: str, end_date: str, resolution: str, payload: dict = Depends(require_active_session)):
     """
     Get historical price info for a stock ticker.
     """
@@ -35,7 +35,7 @@ async def get_stock_info(ticker: str, payload: dict = Depends(require_active_ses
             detail="Ticker parameter is required"
         )
 
-    stock = await stock_historical_service(ticker)
+    stock = await stock_historical_service(ticker, start_date, end_date, resolution)
     return stock
 
 
