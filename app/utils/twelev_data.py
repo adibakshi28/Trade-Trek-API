@@ -48,8 +48,8 @@ async def get_historical_stock_data(symbol: str, start_date: str, end_date: str,
             response = response["values"]
             historical_data = [{
                 "datetime": record["datetime"],
-                "close": round(record["close"],2),
-                "volume": record["volume"] if "volume" in record else 0
+                "close": round(float(record["close"]) ,2),
+                "volume": int(record["volume"]) if "volume" in record else 0
             } for record in response]
             return historical_data
         else:
