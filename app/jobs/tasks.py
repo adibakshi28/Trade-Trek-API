@@ -37,6 +37,8 @@ async def populate_stock_universe():
             number += 1
             print(f"⚠️ {number} : No data found for {stock_ticker}")
     except Exception as e:
+        data_update = {"industry": "No Data", "is_active": False}
+        supabase.table("Stock_Universe").update(data_update).eq("stock_ticker", stock_ticker).eq("asset_type", "STOCK").execute()
         number += 1
         print(f"❌ {number} : Error for {stock_ticker} -> {e}")
 
