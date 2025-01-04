@@ -1,12 +1,44 @@
 import asyncio
 import json
 from app.models.database import supabase
-from app.utils.finnhub import get_stock_symbols, get_crypto_symbols, get_forex_symbols
+from app.utils.finnhub import get_stock_symbols, get_crypto_symbols, get_forex_symbols, get_company_profile
 from app.core.cache import create_stock_universe_cache
 from app.core.config import config
 from datetime import datetime
 from app.models.sqlite_cache import get_from_table, get_cache
 from app.services.real_time_service import real_time_service
+
+number = 0
+
+async def populate_stock_universe():
+    global number
+    try:
+        response = supabase.table("Stock_Universe").select("stock_ticker").eq("asset_type", "STOCK").is_("industry", None).limit(1).execute()
+        stock_ticker = response.data[0]["stock_ticker"]
+        fetched_data = await get_company_profile(stock_ticker)
+        if fetched_data:
+            data_update = {
+                "industry": fetched_data["finnhubIndustry"] if fetched_data["finnhubIndustry"] else "No Data", 
+                "logo_url": fetched_data["logo"] if fetched_data["logo"] else None, 
+                "website_url": fetched_data["weburl"] if fetched_data["weburl"] else None, 
+                "ipo_date": fetched_data["ipo"] if fetched_data["ipo"] else None, 
+                "share_outstanding": fetched_data["shareOutstanding"] if fetched_data["shareOutstanding"] else None, 
+                "exchange_2": fetched_data["exchange"] if fetched_data["exchange"] else None, 
+                "country": fetched_data["country"] if fetched_data["country"] else None, 
+                "estimate_currency": fetched_data["estimateCurrency"] if fetched_data["estimateCurrency"] else None, 
+                "currency_2": fetched_data["currency"] if fetched_data["currency"] else None,
+            }
+            supabase.table("Stock_Universe").update(data_update).eq("stock_ticker", stock_ticker).eq("asset_type", "STOCK").execute()
+            number += 1
+            print(f"✅ {number} : Inserted data for -> {stock_ticker}")
+        else:
+            data_update = {"industry": "No Data", "is_active": False}
+            supabase.table("Stock_Universe").update(data_update).eq("stock_ticker", stock_ticker).eq("asset_type", "STOCK").execute()
+            number += 1
+            print(f"⚠️ {number} : No data found for {stock_ticker}")
+    except Exception as e:
+        number += 1
+        print(f"❌ {number} : Error for {stock_ticker} -> {e}")
 
 
 def another_task():

@@ -182,7 +182,7 @@ def register_startup_events(app: FastAPI):
             validate_db_connection()
             invalidate_any_active_session()                   # Uncomment this line when pushing to production
             await initlize_in_memory_cache()
-            await startup_finnhub_websocket_connection()      # Uncomment this line when pushing to production
+            # await startup_finnhub_websocket_connection()      # Uncomment this line when pushing to production
             print("🚀 All Startup Checks Passed Successfully!")
         except Exception as e:
             print(f"❌ Startup Check Failed: {e}")
