@@ -29,7 +29,7 @@ app.include_router(realtime.router, tags=["WebSocket"])
 @app.get("/")
 def root():
     return {
-        "message": "Welcome to the Mock Trader API Production! 🚀 🚀 🚀" ,
+        "message": "Welcome to the Trade Trek API Production! 🚀 🚀 🚀" ,
         "version": __version__,
         "author": __author__,
     }
