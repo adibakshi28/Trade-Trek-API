@@ -205,7 +205,9 @@ Startup - Create and Add all stocks from all users Portfolio and 💻✅ all Wat
 
 Login - None 
 
-LTP Update - 💻 Twelve Data wb rotation (init) but if LTP INITIAL_LTP_IN_CACHE and no stock data from wb then Finnhub API
+LTP Update - 💻 Twelve Data (Finnhub_2) wb rotation
+
+LTP init - At startup coroutine, use API (1.5 sec delay)
 
 Runtime Add - 
     * Scheduled job (15 min) sync_dormant_stock_subscription_cache 

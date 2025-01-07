@@ -7,7 +7,8 @@ from app.jobs.scheduler import start_scheduler
 from app.models.database import check_connection
 from app.models.sqlite_cache import init_db, check_db_mode, set_cache
 from app.core.cache import create_stock_universe_cache, create_active_user_stock_subscription_cache, create_and_populate_dormant_user_stock_subscription_cache
-from app.core.websocket import connect_to_finnhub
+from app.core.websocket_active import connect_to_finnhub_active
+from app.core.websocket_dormant import connect_to_finnhub_dormant
 from app.models.database import supabase
 from app.core.config import config
 
@@ -18,6 +19,7 @@ def validate_env_variables():
     required_env_vars = [
         "SECRET_KEY",
         "FINNHUB_API_KEY",
+        "FINNHUB_API_KEY_2",
         "SUPABASE_URL",
         "SUPABASE_SERVICE_KEY",
         "TWELVE_DATA_API_KEY",
@@ -61,8 +63,10 @@ def validate_configuration(config: dict):
         "MAX_STOCK_IN_WATCHLIST",
         "STOCK_INDEX_TICKER",
         "INITIAL_LTP_IN_CACHE",
-        "FINNHUB_WEBSOCKET_ROTATION_FREQUENCY",
-        "FINNHUB_WEBSOCKET_BATCH_SIZE",
+        "ACTIVE_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY",
+        "ACTIVE_FINNHUB_WEBSOCKET_BATCH_SIZE",
+        "DORMANT_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY",
+        "DORMANT_FINNHUB_WEBSOCKET_BATCH_SIZE",
     ]
 
     missing_vars = [
@@ -81,8 +85,8 @@ def check_third_party_services(config: dict):
     """
     Check connectivity with a third-party service synchronously and print the API response.
     """
-    finnhub_api_key = os.getenv("FINNHUB_API_KEY")
-    if not finnhub_api_key:
+    FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+    if not FINNHUB_API_KEY:
         raise ValueError("FINNHUB_API_KEY is missing in environment variables.")
     
     finnhub_base_url = config.get("FINNHUB_API_BASE_URL")
@@ -91,7 +95,7 @@ def check_third_party_services(config: dict):
     
     try:
         response = requests.get(
-            f"{finnhub_base_url}quote?symbol=AAPL&token={finnhub_api_key}",
+            f"{finnhub_base_url}quote?symbol=AAPL&token={FINNHUB_API_KEY}",
             timeout=10
         )
         
@@ -168,8 +172,9 @@ async def startup_finnhub_websocket_connection():
     Connect to the Finnhub WebSocket.
     """
     try:
-        asyncio.create_task(connect_to_finnhub())
-        print("✅ Finnhub websocket connection initlized.")
+        asyncio.create_task(connect_to_finnhub_active())    
+        asyncio.create_task(connect_to_finnhub_dormant())
+        print("✅ Finnhub websocket (Active & Dormant) connection initlized.")
     except Exception as e:
         print(f"❌ Failed to initialize Finnhub websocket connection: {e}")
 

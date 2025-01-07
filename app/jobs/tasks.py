@@ -9,6 +9,22 @@ from app.models.sqlite_cache import get_from_table, execute_sql
 from app.services.real_time_service import real_time_service
 from app.utils.finnhub import get_stock_quote
 
+
+async def print_dormant():
+    try:
+        print("..............................................................................................")
+        ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+        result = await get_from_table(ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE)
+        print(f"🔄 [SCHEDULED JOB] ACTIVE User Stock Subscription Cache: {result}")
+        print("..............................................................................................")
+        DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+        result = await get_from_table(DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE)
+        print(f"🔄 [SCHEDULED JOB] DORMANT User Stock Subscription Cache: {result}")
+        print("..............................................................................................")
+    except Exception as e:
+        print(f"❌ [SCHEDULED JOB] Error in print_ACTIVE: {e}")
+    
+
 def sync_snp500_constituents():
     try:
         print(f"🔄 [SCHEDULED JOB] Starting sync S&P 500 constituents from static csv job ...")

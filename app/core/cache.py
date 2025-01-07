@@ -14,8 +14,10 @@ from app.models.sqlite_cache import (
 )
 
 from app.core.shared import (
-    subscribed_symbols,
-    subscription_lock
+    active_subscribed_symbols,
+    active_subscription_lock,
+    dormant_subscribed_symbols,
+    dormant_subscription_lock
 )
 
 user_connection_locks = defaultdict(asyncio.Lock)
@@ -186,10 +188,10 @@ async def add_stock_to_active_stock_subscription_cache(stock_ticker: str, user_i
 
                 await add_update_to_dormant_user_stock_subscription_cache([(stock_ticker, current_price)])
 
-                # Add to subscribed_symbols under lock
-                async with subscription_lock:
-                    print("Adding to subscribed_symbols from add_stock_to_active_stock_subscription_cache(): ", stock_ticker)
-                    subscribed_symbols.add(stock_ticker)
+                # Add to active_subscribed_symbols under lock
+                async with active_subscription_lock:
+                    print("Adding to active_subscribed_symbols from add_stock_to_active_stock_subscription_cache(): ", stock_ticker)
+                    active_subscribed_symbols.add(stock_ticker)
 
             # Add user_id to user_subscribers (if not already present)
             await execute_sql(
@@ -272,10 +274,11 @@ async def remove_stock_from_active_stock_subscription_cache(stock_ticker: str, u
                     (stock_ticker,)
                 )
 
-                # Remove from subscribed_symbols under lock
-                async with subscription_lock:
-                    if stock_ticker in subscribed_symbols:
-                        subscribed_symbols.remove(stock_ticker)
+                # Remove from active_subscribed_symbols under lock
+                async with active_subscription_lock:
+                    if stock_ticker in active_subscribed_symbols:
+                        active_subscribed_symbols.remove(stock_ticker)
+                        print(f"Removed {stock_ticker} from active_subscribed_symbols as no subscribers remain.")
 
         except Exception as ex:
             print(f"❌ Unexpected Error: {ex}")
@@ -355,10 +358,10 @@ async def add_portfolio_n_watchlist_stocks_for_user_to_active_stock_subscription
 
                     await add_update_to_dormant_user_stock_subscription_cache([(stock_ticker, current_price)])
 
-                    # Add to subscribed_symbols under lock
-                    async with subscription_lock:
-                        print(f"Adding to subscribed_symbols from add_portfolio_n_watchlist_stocks_for_user_to_active_stock_subscription_cache(): {stock_ticker}")
-                        subscribed_symbols.add(stock_ticker)
+                    # Add to active_subscribed_symbols under lock
+                    async with active_subscription_lock:
+                        print(f"Adding to active_subscribed_symbols from add_portfolio_n_watchlist_stocks_for_user_to_active_stock_subscription_cache(): {stock_ticker}")
+                        active_subscribed_symbols.add(stock_ticker)
 
                 # Add user_id to user_subscribers (if not already present)
                 await execute_sql(
@@ -449,11 +452,11 @@ async def remove_all_stocks_for_user_from_active_stock_subscription_cache(user_i
                         (stock_ticker,)
                     )
 
-                    # Remove from subscribed_symbols under lock
-                    async with subscription_lock:
-                        if stock_ticker in subscribed_symbols:
-                            subscribed_symbols.remove(stock_ticker)
-                            print(f"Removed {stock_ticker} from subscribed_symbols as no subscribers remain.")
+                    # Remove from active_subscribed_symbols under lock
+                    async with active_subscription_lock:
+                        if stock_ticker in active_subscribed_symbols:
+                            active_subscribed_symbols.remove(stock_ticker)
+                            print(f"Removed {stock_ticker} from active_subscribed_symbols as no subscribers remain.")
 
                     # Unsubscribe from real-time updates will be handled by the rotation task
                     # No need to call unsubscribe_symbol directly
@@ -461,6 +464,58 @@ async def remove_all_stocks_for_user_from_active_stock_subscription_cache(user_i
         except Exception as ex:
             print(f"❌ Unexpected Error in remove_all_stocks_for_user_from_active_stock_subscription_cache: {ex}")
             raise ex
+        
+
+
+async def initialize_stock_prices():
+    """
+    Continuously initialize the price of stocks in the dormant cache by fetching their current prices
+    and updating the cache accordingly. This function respects API rate limits by
+    introducing a 5-second cooldown between API calls and runs asynchronously to
+    avoid blocking other tasks. It loops until no stocks have the initial price
+    """
+    DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+    INITIAL_LTP_IN_CACHE = config["INITIAL_LTP_IN_CACHE"]
+
+    try:
+        while True:
+            # Fetch all stock_tickers with ltp equal to INITIAL_LTP_IN_CACHE
+            query = f"""
+                SELECT stock_ticker 
+                FROM {DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE}
+                WHERE ltp = ?
+            """
+            stocks_to_initialize = await execute_sql(query, [INITIAL_LTP_IN_CACHE])
+
+            if not stocks_to_initialize:
+                print("✅ No stocks require price initialization. Initialization process completed.")
+                break  # Exit the loop when there are no more stocks to initialize
+
+            print(f"🔄 Initializing prices for {len(stocks_to_initialize)} stocks.")
+
+            stock_ticker = stocks_to_initialize[0][0]
+            try:
+                # Fetch current stock price
+                company_quote = await get_stock_quote(stock_ticker)
+                current_price = round(company_quote["c"], 2) if company_quote and "c" in company_quote else 0
+
+                # Update the dormant cache with the current price
+                await add_update_to_dormant_user_stock_subscription_cache([(stock_ticker, current_price)])
+                print(f"✅ Updated {stock_ticker} with price {current_price}")
+
+            except Exception as stock_err:
+                print(f"❌ Error updating {stock_ticker}: {stock_err}")
+
+            # Respect API rate limits
+            await asyncio.sleep(1.75)
+
+
+        print("✅ Completed initializing all stock prices.")
+
+    except Exception as ex:
+        print(f"❌ Unexpected Error during price initialization: {ex}")
+
+
                
 async def create_and_populate_dormant_user_stock_subscription_cache():
     """
@@ -507,6 +562,9 @@ async def create_and_populate_dormant_user_stock_subscription_cache():
         if insert_data:
             await add_update_to_dormant_user_stock_subscription_cache(insert_data)
 
+        # Initialize stock prices asynchronously without blocking
+        asyncio.create_task(initialize_stock_prices())
+
         print(f"✅ Dormant user stock subscription cache successfully created and populated with {len(insert_data)} stocks")
     except APIError as api_err:
         print(f"❌ Supabase API Error: {api_err}")
@@ -531,6 +589,15 @@ async def add_update_to_dormant_user_stock_subscription_cache(insert_data: list[
         """
 
         await execute_sql(insert_query, insert_data, bulk=True)
+
+
+        for stock_ticker, _ in insert_data:
+            # Add to dormant_subscribed_symbols under lock
+            async with dormant_subscription_lock:
+                if stock_ticker not in dormant_subscribed_symbols:
+                    print("Adding to dormant_subscribed_symbols from add_update_to_dormant_user_stock_subscription_cache(): ", stock_ticker)
+                    dormant_subscribed_symbols.add(stock_ticker)
+
     except Exception as ex:
         print(f"❌ Unexpected Error: {ex}")
         raise ex
@@ -549,6 +616,14 @@ async def remove_stock_from_dormant_user_stock_subscription_cache(tickers_to_rem
             WHERE stock_ticker IN ({placeholders})
         """
         await execute_sql(delete_query, tickers_to_remove)
+
+        for stock_ticker in tickers_to_remove:
+            # Remove from dormant_subscribed_symbols under lock
+            async with dormant_subscription_lock:
+                if stock_ticker in dormant_subscribed_symbols:
+                    dormant_subscribed_symbols.remove(stock_ticker)
+                    print(f"Removed {stock_ticker} from dormant_subscribed_symbols.")
+
     except Exception as ex:
         print(f"❌ Unexpected Error: {ex}")
         raise ex
@@ -590,17 +665,44 @@ async def update_stock_ltp_in_cache(stock_ticker: str, new_price: float):
         raise ex
 
 
-async def bulk_update_stock_ltp_in_cache(updates: list[tuple[float, str]]):
+async def bulk_update_active_stock_ltp_in_cache(updates: list[tuple[float, str]]):
     """
     Perform a bulk update of LTP (Last Traded Price) for multiple stocks in the ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE.
     """
     ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
 
-    # await print_stock_subs_cache(f'In bulk_update_stock_ltp_in_cache ; START:')
+    # await print_stock_subs_cache(f'In bulk_update_active_stock_ltp_in_cache ; START:')
 
     try:
         query = f"""
         UPDATE {ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE}
+        SET ltp = CASE stock_ticker
+        {''.join([f"WHEN ? THEN ? " for _ in updates])}
+        END
+        WHERE stock_ticker IN ({', '.join(['?' for _ in updates])})
+        """
+
+        parameters = [param for update in updates for param in reversed(update)] + [update[1] for update in updates]
+
+        await execute_sql(query, tuple(parameters))
+
+    except Exception as ex:
+        print(f"❌ Unexpected Error (bulk_update_ltp): {ex}")
+        raise ex
+    
+
+async def bulk_update_dormant_stock_ltp_in_cache(updates: list[tuple[float, str]]):
+    """
+    Perform a bulk update of LTP (Last Traded Price) for multiple stocks in the DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE.
+    """
+    DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+    INITIAL_LTP_IN_CACHE = config["INITIAL_LTP_IN_CACHE"]
+
+    # await print_stock_subs_cache(f'In bulk_update_dormant_stock_ltp_in_cache ; START:')
+
+    try:
+        query = f"""
+        UPDATE {DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE}
         SET ltp = CASE stock_ticker
         {''.join([f"WHEN ? THEN ? " for _ in updates])}
         END

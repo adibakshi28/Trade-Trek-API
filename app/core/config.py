@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
-TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY")   # For Historical Data and Dormant stock sub ltp updates
+FINNHUB_API_KEY_2 = os.getenv("FINNHUB_API_KEY_2")       # Dormant stock sub ltp updates 
+TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY")   # For Historical Data 
 
 config = {
     "FINNHUB_API_BASE_URL": "https://finnhub.io/api/v1/",
@@ -33,6 +34,8 @@ config = {
     "MAX_STOCK_IN_WATCHLIST": 10,
     "STOCK_INDEX_TICKER": "SPY",
     "INITIAL_LTP_IN_CACHE": -1,     # Initial LTP in (Active/Dormant) subscription cache indicating LTP not available yet (Keep it negative)
-    "FINNHUB_WEBSOCKET_ROTATION_FREQUENCY": 1,  # One batch of stock remains subscribed for x seconds (Should be more than FINNHUB_WEBSOCKET_MSG_DELAY)
-    "FINNHUB_WEBSOCKET_BATCH_SIZE": 48,       # Number of stocks to subscribe in one batch
+    "ACTIVE_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY": 1,  # One batch of stock remains subscribed for x seconds (Should be more than FINNHUB_WEBSOCKET_MSG_DELAY)
+    "ACTIVE_FINNHUB_WEBSOCKET_BATCH_SIZE": 48,       # Number of stocks to subscribe in one batch
+    "DORMANT_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY": 3,  # One batch of stock remains subscribed for x seconds (Should be more than FINNHUB_WEBSOCKET_MSG_DELAY)
+    "DORMANT_FINNHUB_WEBSOCKET_BATCH_SIZE": 48,       # Number of stocks to subscribe in one batch
 }
