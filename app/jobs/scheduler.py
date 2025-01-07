@@ -1,7 +1,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from app.jobs.tasks import update_stock_universe_cache, sync_stock_universe, another_task, print_stock_subscription_table, fe_be_websocket_msg_broadcast
+from app.jobs.tasks import update_stock_universe_cache, fe_be_websocket_msg_broadcast, sync_snp500_constituents, sync_dormant_stock_subscription_cache, calculate_portfolio_value, delete_stock_history
 from app.core.config import config
 import asyncio
 import atexit
@@ -21,14 +21,15 @@ def start_scheduler():
     scheduler = BackgroundScheduler()
 
     # Add periodic jobs (non async functions)
-    scheduler.add_job(another_task, IntervalTrigger(minutes=30), id="another_task", replace_existing=True)
-    scheduler.add_job(sync_stock_universe, CronTrigger(hour=1, minute=0, timezone=config["TIMEZONE"]), id="sync_stock_universe", replace_existing=True)
-    
+    scheduler.add_job(sync_snp500_constituents, CronTrigger(hour=2, minute=0, second=0, timezone=config["TIMEZONE"]), id="sync_snp500_constituents", replace_existing=True)
+
     # For running async functions
     scheduler.add_job(run_async_job, IntervalTrigger(hours=24), id="update_stock_universe_cache", replace_existing=True, args=[update_stock_universe_cache])
-    scheduler.add_job(run_async_job, IntervalTrigger(seconds=config['FE_BE_WEBSOCKET_MSG_FREQUENCY']), id="fe_be_websocket_msg_broadcast", replace_existing=True, args=[fe_be_websocket_msg_broadcast])
+    scheduler.add_job(run_async_job, IntervalTrigger(seconds=config['FE_BE_WEBSOCKET_MSG_DELAY']), id="fe_be_websocket_msg_broadcast", replace_existing=True, args=[fe_be_websocket_msg_broadcast])
+    scheduler.add_job(run_async_job, IntervalTrigger(minutes=13), id="sync_dormant_stock_subscription_cache", replace_existing=True, args=[sync_dormant_stock_subscription_cache])
+    scheduler.add_job(run_async_job, IntervalTrigger(minutes=config["PORTFOLIO_SNAPSHOT_DELAY"]), id="calculate_portfolio_value", replace_existing=True, args=[calculate_portfolio_value])
+    scheduler.add_job(run_async_job, IntervalTrigger(hours=24), id="delete_stock_history", replace_existing=True, args=[delete_stock_history])
 
-    # scheduler.add_job(run_async_job, IntervalTrigger(seconds=15), id="print_stock_subscription_table_task", replace_existing=True, args=[print_stock_subscription_table])
 
     scheduler.start()
 

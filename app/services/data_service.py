@@ -9,7 +9,7 @@ from typing import List, Optional
 from app.core.config import config
 from app.models.database import supabase
 from app.models.sqlite_cache import execute_sql, check_table_exists
-from app.core.cache import create_stock_universe_cache
+from app.core.cache import create_stock_universe_cache, add_update_to_dormant_user_stock_subscription_cache
 from app.utils.finnhub import get_company_profile, get_company_news, get_basic_financials, get_stock_quote
 from app.utils.twelev_data import get_historical_stock_data
 
@@ -243,13 +243,13 @@ async def stock_universe_service():
             await create_stock_universe_cache()
 
         query = f"""
-            SELECT stock_ticker, stock_name, asset_type
+            SELECT stock_ticker, stock_name, sector, sub_sector, headquarters_location, date_added, year_founded, currency, exchange, asset_type, share_outstanding, ipo_date, logo_url, website_url
             FROM {STOCK_UNIVERSE_CACHE_TABLE};
         """
         params = ()
         results = await execute_sql(query, params)
 
-        keys = ["stock_ticker", "stock_name", "asset_type"]
+        keys = ["stock_ticker", "stock_name", "sector", "sub_sector", "headquarters_location", "date_added", "year_founded", "currency", "exchange", "asset_type", "share_outstanding", "ipo_date", "logo_url", "website_url"]
         dict_results = [dict(zip(keys, row)) for row in results]
 
         return dict_results
@@ -552,6 +552,9 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                     "is_active": True
                 }
                 transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
+
+        # !: Add stock to Dormant Stock Subscription Cache (Would be removed in scheduled job if not required)
+        await add_update_to_dormant_user_stock_subscription_cache([(ticker, price)])
 
         # !: Return transaction details, updated portfolio, and cash balance
         currentCash = supabase.table("Cash").select("cash").eq("user_id", user_id).eq("is_active", True).execute()

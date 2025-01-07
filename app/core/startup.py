@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from app.jobs.scheduler import start_scheduler
 from app.models.database import check_connection
 from app.models.sqlite_cache import init_db, check_db_mode, set_cache
-from app.core.cache import create_stock_universe_cache, create_stock_subscription_cache
+from app.core.cache import create_stock_universe_cache, create_active_user_stock_subscription_cache, create_and_populate_dormant_user_stock_subscription_cache
 from app.core.websocket import connect_to_finnhub
 from app.models.database import supabase
 from app.core.config import config
@@ -40,12 +40,13 @@ def validate_configuration(config: dict):
         "FINNHUB_WEBSOCKET_URL",
         "PASSWORD_ENCRYPTION_ALGORITHM",
         "ACCESS_TOKEN_EXPIRE_MINUTES",
-        "STOCK_EXCHANGE",
-        "CRYPTO_EXCHANGE",
-        "FOREX_EXCHANGE",
+        "FINNHUB_STOCK_EXCHANGE",
+        "FINNHUB_CRYPTO_EXCHANGE",
+        "FINNHUB_FOREX_EXCHANGE",
         "TIMEZONE",
         "STOCK_UNIVERSE_CACHE_TABLE",
-        "STOCK_SUBSCRIPTION_CACHE_TABLE",
+        "ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE",
+        "DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE",
         "INITIAL_CASH",
         "ALLOW_FRACTIONAL_SHARES",
         "FRACTIONAL_SHARES_MIN_TRADE",
@@ -53,9 +54,15 @@ def validate_configuration(config: dict):
         "MAX_ASSETS_IN_PORTFOLIO",
         "TRANSACTION_FEE",
         "NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY",
-        "FE_BE_WEBSOCKET_MSG_FREQUENCY",
-        "FINNHUB_WEBSOCKET_MSG_FREQUENCY",
-        "TWELVE_DATA_BASE_URL"
+        "FE_BE_WEBSOCKET_MSG_DELAY",
+        "FINNHUB_WEBSOCKET_MSG_DELAY",
+        "TWELVE_DATA_BASE_URL",
+        "PORTFOLIO_SNAPSHOT_DELAY",
+        "MAX_STOCK_IN_WATCHLIST",
+        "STOCK_INDEX_TICKER",
+        "INITIAL_LTP_IN_CACHE",
+        "FINNHUB_WEBSOCKET_ROTATION_FREQUENCY",
+        "FINNHUB_WEBSOCKET_BATCH_SIZE",
     ]
 
     missing_vars = [
@@ -147,7 +154,8 @@ async def initlize_in_memory_cache():
             print("⚠️  SQLite DB is not configured correctly - Not in-memory mode.")
 
         await create_stock_universe_cache()
-        await create_stock_subscription_cache()
+        await create_active_user_stock_subscription_cache()
+        await create_and_populate_dormant_user_stock_subscription_cache()
         await set_cache(config['NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY'], 0)
 
         print("✅ SQLite cache initiated and created.")
@@ -180,9 +188,9 @@ def register_startup_events(app: FastAPI):
             validate_configuration(config=config)
             check_third_party_services(config=config)
             validate_db_connection()
-            invalidate_any_active_session()                   # Uncomment this line when pushing to production
+            # invalidate_any_active_session()                   # Uncomment this line when pushing to production
             await initlize_in_memory_cache()
-            await startup_finnhub_websocket_connection()      # Uncomment this line when pushing to production
+            await startup_finnhub_websocket_connection()
             print("🚀 All Startup Checks Passed Successfully!")
         except Exception as e:
             print(f"❌ Startup Check Failed: {e}")

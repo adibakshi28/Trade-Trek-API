@@ -1,14 +1,17 @@
 # app/services/real_time_service.py
 
 from typing import Dict
+import time
 from collections import defaultdict
 from fastapi import WebSocket, WebSocketDisconnect
 
 from app.core.config import config
 from app.models.sqlite_cache import execute_sql
 from app.core.cache import (
-    add_all_stocks_for_user_to_stock_subscription_cache,
-    remove_all_stocks_for_user_from_stock_subscription_cache,
+    add_stock_to_active_stock_subscription_cache, 
+    remove_stock_from_active_stock_subscription_cache, 
+    add_portfolio_n_watchlist_stocks_for_user_to_active_stock_subscription_cache,
+    remove_all_stocks_for_user_from_active_stock_subscription_cache,
 )
 from app.models.sqlite_cache import set_cache
 
@@ -43,8 +46,6 @@ class RealTimeService:
         # Update cached count
         await set_cache(NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY, len(self.active_connections))
 
-        # Add all user stocks in the subscription cache
-        await add_all_stocks_for_user_to_stock_subscription_cache(user_id)
 
     async def disconnect(self, user_id: int):
         """Remove WebSocket connection by user_id."""
@@ -68,7 +69,7 @@ class RealTimeService:
                 await set_cache(NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY, len(self.active_connections))
 
                 # Remove all user stocks from the subscription cache
-                await remove_all_stocks_for_user_from_stock_subscription_cache(user_id)
+                await remove_all_stocks_for_user_from_active_stock_subscription_cache(user_id)
 
     async def broadcast(self, message: str):
         """Broadcast a message to all connected clients."""
@@ -96,6 +97,45 @@ class RealTimeService:
         
         for user_id in disconnected_users:
             await self.disconnect(user_id)
+
+    async def send_personal_message(self, user_id: int, message: str):
+        """Send a personal message to a specific user."""
+        if user_id in self.active_connections:
+            connection = self.active_connections[user_id]
+            try:
+                await connection.send_text(message)
+            except WebSocketDisconnect:
+                await self.disconnect(user_id)
+        else:
+            print(f"⚠️ User {user_id} is not connected.")
+
+    async def handle_incoming_message(self, user_id: int, message: dict):
+        """Handle incoming messages from WebSocket clients."""
+        self.message_count[user_id] += 1
+        self.last_message_time[user_id] = time.time()
+
+        if not message or 'type' not in message:
+            print(f"⚠️ Invalid message received from user {user_id}: {message}. (It should have a 'type' key.)")
+            return
+        
+        type = message['type']
+
+        if type == "subscribe":
+            stock_symbol = message.get("symbol")
+            if stock_symbol:
+                await add_stock_to_active_stock_subscription_cache(stock_symbol, user_id)
+                print(f"📌 User {user_id} subscribed to {stock_symbol}")
+        elif type == "unsubscribe":
+            stock_symbol = message.get("symbol")
+            if stock_symbol:
+                await remove_stock_from_active_stock_subscription_cache(stock_symbol, user_id)
+                print(f"📌 User {user_id} unsubscribed from {stock_symbol}")
+        elif type == "subscribe_portfolio_watchlist":
+            await add_portfolio_n_watchlist_stocks_for_user_to_active_stock_subscription_cache(user_id)
+            print(f"📌 User {user_id} subscribed to all portfolio and watchlist stocks")
+        elif type == "unsubscribe_all":
+            await remove_all_stocks_for_user_from_active_stock_subscription_cache(user_id)
+            print(f"📌 User {user_id} unsubscribed from all stocks")
 
 
 # Singleton instance
