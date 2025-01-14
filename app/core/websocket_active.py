@@ -44,7 +44,7 @@ async def connect_to_finnhub_active():
                 # Initialize active_batches under lock
                 async with active_subscription_lock:
                     active_batches = create_batches(active_subscribed_symbols, ACTIVE_FINNHUB_WEBSOCKET_BATCH_SIZE)
-                    print(f"Initial active_batches: {active_batches}")
+                    # print(f"Initial active_batches: {active_batches}")
 
                 # Subscribe to the initial batch
                 await subscribe_next_batch()
@@ -117,17 +117,17 @@ async def handle_finnhub_message(message: str):
                 await bulk_update_active_stock_ltp_in_cache(updates)
                 last_update_time = current_time
 
-        elif msg_type == "ping":
-            # Finnhub might send ping messages, which we could handle if needed.
-            print("💬 Received ping from Active Finnhub:", data)
+        # elif msg_type == "ping":
+        #     # Finnhub might send ping messages, which we could handle if needed.
+        #     print("💬 Received ping from Active Finnhub:", data)
 
-        elif msg_type == "info":
-            # Sometimes Finnhub can send 'info' type messages with codes/warnings.
-            print("💬 Info message from Active Finnhub:", data)
+        # elif msg_type == "info":
+        #     # Sometimes Finnhub can send 'info' type messages with codes/warnings.
+        #     print("💬 Info message from Active Finnhub:", data)
 
-        else:
-            # If Finnhub sends something else, let's log it for debugging
-            print(f"💬 Received a message with unknown type '{msg_type}':", data)
+        # else:
+        #     # If Finnhub sends something else, let's log it for debugging
+        #     print(f"💬 Received a message with unknown type '{msg_type}':", data)
 
     except json.JSONDecodeError:
         print("❌ Received non-JSON message from Active Finnhub.")
@@ -179,12 +179,12 @@ async def rotate_subscriptions():
             # Update active_current_batch under lock
             async with active_subscription_lock:
                 active_current_batch = next_batch
-                print(f"🔄 Current batch updated to (Active): {active_current_batch}")
+                # print(f"🔄 Current batch updated to (Active): {active_current_batch}")
 
             await asyncio.sleep(ACTIVE_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY)
 
         except asyncio.CancelledError:
-            print("❌ Rotation task cancelled (Active).")
+            print("✖️  Rotation task cancelled (Active).")
             break
         except Exception as e:
             print(f"❌ Error during subscription rotation (Active): {e}")

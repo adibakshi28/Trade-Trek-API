@@ -222,7 +222,7 @@ async def stock_transaction_value_service(user_id: int, ticker: str, quantity: f
                 response_result["sell_trade_possible"] = False
 
         response_result["transaction_fee"] = 0 if not (response_result["buy_trade_possible"] and response_result["sell_trade_possible"]) else response_result["transaction_fee"]
-        response_result["buy_trade_possible"] = 0 if not response_result["buy_trade_possible"] else response_result["required_funds_buy"]
+        response_result["required_funds_buy"] = 0 if not response_result["buy_trade_possible"] else response_result["required_funds_buy"]
         response_result["required_funds_sell"] = 0 if not response_result["sell_trade_possible"] else response_result["required_funds_sell"]
 
             

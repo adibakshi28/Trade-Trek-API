@@ -190,7 +190,7 @@ async def add_stock_to_active_stock_subscription_cache(stock_ticker: str, user_i
 
                 # Add to active_subscribed_symbols under lock
                 async with active_subscription_lock:
-                    print("Adding to active_subscribed_symbols from add_stock_to_active_stock_subscription_cache(): ", stock_ticker)
+                    # print("Adding to active_subscribed_symbols from add_stock_to_active_stock_subscription_cache(): ", stock_ticker)
                     active_subscribed_symbols.add(stock_ticker)
 
             # Add user_id to user_subscribers (if not already present)
@@ -360,7 +360,7 @@ async def add_portfolio_n_watchlist_stocks_for_user_to_active_stock_subscription
 
                     # Add to active_subscribed_symbols under lock
                     async with active_subscription_lock:
-                        print(f"Adding to active_subscribed_symbols from add_portfolio_n_watchlist_stocks_for_user_to_active_stock_subscription_cache(): {stock_ticker}")
+                        # print(f"Adding to active_subscribed_symbols from add_portfolio_n_watchlist_stocks_for_user_to_active_stock_subscription_cache(): {stock_ticker}")
                         active_subscribed_symbols.add(stock_ticker)
 
                 # Add user_id to user_subscribers (if not already present)
@@ -488,10 +488,10 @@ async def initialize_stock_prices():
             stocks_to_initialize = await execute_sql(query, [INITIAL_LTP_IN_CACHE])
 
             if not stocks_to_initialize:
-                print("✅ No stocks require price initialization. Initialization process completed.")
+                # print("✅ No stocks require price initialization. Initialization process completed.")
                 break  # Exit the loop when there are no more stocks to initialize
 
-            print(f"🔄 Initializing prices for {len(stocks_to_initialize)} stocks.")
+            # print(f"🔄 Initializing prices for {len(stocks_to_initialize)} stocks.")
 
             stock_ticker = stocks_to_initialize[0][0]
             try:
@@ -501,16 +501,16 @@ async def initialize_stock_prices():
 
                 # Update the dormant cache with the current price
                 await add_update_to_dormant_user_stock_subscription_cache([(stock_ticker, current_price)])
-                print(f"✅ Updated {stock_ticker} with price {current_price}")
+                # print(f"✅ Updated {stock_ticker} with price {current_price}")
 
             except Exception as stock_err:
                 print(f"❌ Error updating {stock_ticker}: {stock_err}")
 
             # Respect API rate limits
-            await asyncio.sleep(1.75)
+            await asyncio.sleep(1.5)
 
 
-        print("✅ Completed initializing all stock prices.")
+        print("✅ Completed initializing all stock prices for Dormant cache.")
 
     except Exception as ex:
         print(f"❌ Unexpected Error during price initialization: {ex}")
@@ -595,7 +595,7 @@ async def add_update_to_dormant_user_stock_subscription_cache(insert_data: list[
             # Add to dormant_subscribed_symbols under lock
             async with dormant_subscription_lock:
                 if stock_ticker not in dormant_subscribed_symbols:
-                    print("Adding to dormant_subscribed_symbols from add_update_to_dormant_user_stock_subscription_cache(): ", stock_ticker)
+                    # print("Adding to dormant_subscribed_symbols from add_update_to_dormant_user_stock_subscription_cache(): ", stock_ticker)
                     dormant_subscribed_symbols.add(stock_ticker)
 
     except Exception as ex:

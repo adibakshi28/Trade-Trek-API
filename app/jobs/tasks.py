@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 import pandas as pd
 from datetime import datetime, timedelta
 from app.models.database import supabase
@@ -7,7 +8,7 @@ from app.core.cache import create_stock_universe_cache, remove_stock_from_dorman
 from app.core.config import config
 from app.models.sqlite_cache import get_from_table, execute_sql
 from app.services.real_time_service import real_time_service
-from app.utils.finnhub import get_stock_quote
+from app.utils.finnhub import get_stock_quote, get_market_status
 
 
 async def print_dormant():
@@ -75,7 +76,8 @@ async def fe_be_websocket_msg_broadcast():
     for stock in result:
         msg = {
             "stock_ticker": stock[0],
-            "ltp": stock[1]
+            "ltp": stock[1],
+            "day_change": random.randint(-10, 10)
         }
         message.append(msg)
     await real_time_service.broadcast(json.dumps(message))
@@ -149,6 +151,7 @@ async def sync_dormant_stock_subscription_cache():
 
 async def calculate_portfolio_value():
     """
+    Works only if the market is open.
     Calculate portfolio value, unrealised PNL, and cash for all users.
     Updates Portfolio_History with the calculated values and Stock_History with the latest stock prices. 
     (using dormant stock subscription cache)
@@ -159,6 +162,14 @@ async def calculate_portfolio_value():
         DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config["DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE"]
         STOCK_INDEX_TICKER = config["STOCK_INDEX_TICKER"]
         TIMEZONE = config["TIMEZONE"]
+        FINNHUB_STOCK_EXCHANGE = config["FINNHUB_STOCK_EXCHANGE"]
+
+        # Check if the market is open
+        market_status = await get_market_status(FINNHUB_STOCK_EXCHANGE)
+
+        if not market_status['isOpen']:
+            print(f"✅ [SCHEDULED JOB] {FINNHUB_STOCK_EXCHANGE} Market is closed. Skipping Calculate Portfolio Value job.")
+            return
 
         users_response = supabase.table("Users").select(
             "id"

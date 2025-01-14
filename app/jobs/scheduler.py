@@ -24,11 +24,11 @@ def start_scheduler():
     scheduler.add_job(sync_snp500_constituents, CronTrigger(hour=2, minute=0, second=0, timezone=config["TIMEZONE"]), id="sync_snp500_constituents", replace_existing=True)
 
     # For running async functions
-    scheduler.add_job(run_async_job, IntervalTrigger(hours=24), id="update_stock_universe_cache", replace_existing=True, args=[update_stock_universe_cache])
-    scheduler.add_job(run_async_job, IntervalTrigger(seconds=config['FE_BE_WEBSOCKET_MSG_DELAY']), id="fe_be_websocket_msg_broadcast", replace_existing=True, args=[fe_be_websocket_msg_broadcast])
-    scheduler.add_job(run_async_job, IntervalTrigger(minutes=13), id="sync_dormant_stock_subscription_cache", replace_existing=True, args=[sync_dormant_stock_subscription_cache])
-    scheduler.add_job(run_async_job, IntervalTrigger(minutes=config["PORTFOLIO_SNAPSHOT_DELAY"]), id="calculate_portfolio_value", replace_existing=True, args=[calculate_portfolio_value])
-    scheduler.add_job(run_async_job, IntervalTrigger(hours=24), id="delete_stock_history", replace_existing=True, args=[delete_stock_history])
+    scheduler.add_job(run_async_job, IntervalTrigger(hours=24), id="update_stock_universe_cache", replace_existing=True, args=[update_stock_universe_cache], max_instances=3)
+    scheduler.add_job(run_async_job, IntervalTrigger(seconds=config['FE_BE_WEBSOCKET_MSG_DELAY']), id="fe_be_websocket_msg_broadcast", replace_existing=True, args=[fe_be_websocket_msg_broadcast], max_instances=3)
+    scheduler.add_job(run_async_job, IntervalTrigger(minutes=13), id="sync_dormant_stock_subscription_cache", replace_existing=True, args=[sync_dormant_stock_subscription_cache], max_instances=3)
+    scheduler.add_job(run_async_job, IntervalTrigger(minutes=config["PORTFOLIO_SNAPSHOT_DELAY"]), id="calculate_portfolio_value", replace_existing=True, args=[calculate_portfolio_value], max_instances=3)
+    scheduler.add_job(run_async_job, IntervalTrigger(hours=24), id="delete_stock_history", replace_existing=True, args=[delete_stock_history], max_instances=3)
 
     # scheduler.add_job(run_async_job, IntervalTrigger(seconds=30), id="print_dormant", replace_existing=True, args=[print_dormant])
 

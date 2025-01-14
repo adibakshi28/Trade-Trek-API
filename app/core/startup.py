@@ -67,6 +67,7 @@ def validate_configuration(config: dict):
         "ACTIVE_FINNHUB_WEBSOCKET_BATCH_SIZE",
         "DORMANT_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY",
         "DORMANT_FINNHUB_WEBSOCKET_BATCH_SIZE",
+        "REGISTER_USER_WATCHLIST"
     ]
 
     missing_vars = [

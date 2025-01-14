@@ -30,7 +30,7 @@ config = {
     "FINNHUB_WEBSOCKET_MSG_DELAY": 0.5,   # LTP update from Finnhub every x seconds
     "NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY": "Number_Of_Active_Websockets_Cache",
     "TWELVE_DATA_BASE_URL": "https://api.twelvedata.com/",
-    "PORTFOLIO_SNAPSHOT_DELAY": 15,        # Portfolio snapshot every x minutes
+    "PORTFOLIO_SNAPSHOT_DELAY": 12,        # Portfolio snapshot every x minutes
     "MAX_STOCK_IN_WATCHLIST": 10,
     "STOCK_INDEX_TICKER": "SPY",
     "INITIAL_LTP_IN_CACHE": -1,     # Initial LTP in (Active/Dormant) subscription cache indicating LTP not available yet (Keep it negative)
@@ -38,4 +38,5 @@ config = {
     "ACTIVE_FINNHUB_WEBSOCKET_BATCH_SIZE": 48,       # Number of stocks to subscribe in one batch
     "DORMANT_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY": 3,  # One batch of stock remains subscribed for x seconds (Should be more than FINNHUB_WEBSOCKET_MSG_DELAY)
     "DORMANT_FINNHUB_WEBSOCKET_BATCH_SIZE": 48,       # Number of stocks to subscribe in one batch
+    "REGISTER_USER_WATCHLIST": ['AAPL', "MSFT", "NVDA", "TSLA", "GS"],  # list of stock symbols to be added to watchlist of new users 
 }

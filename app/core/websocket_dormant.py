@@ -44,7 +44,7 @@ async def connect_to_finnhub_dormant():
                 # Initialize dormant_batches under lock
                 async with dormant_subscription_lock:
                     dormant_batches = create_batches(dormant_subscribed_symbols, DORMANT_FINNHUB_WEBSOCKET_BATCH_SIZE)
-                    print(f"Initial dormant_batches: {dormant_batches}")
+                    # print(f"Initial dormant_batches: {dormant_batches}")
 
                 # Subscribe to the initial batch
                 await subscribe_next_batch()
@@ -117,17 +117,17 @@ async def handle_finnhub_message(message: str):
                 await bulk_update_dormant_stock_ltp_in_cache(updates)
                 last_update_time = current_time
 
-        elif msg_type == "ping":
-            # Finnhub might send ping messages, which we could handle if needed.
-            print("💬 Received ping from Dormant Finnhub:", data)
+        # elif msg_type == "ping":
+        #     # Finnhub might send ping messages, which we could handle if needed.
+        #     print("💬 Received ping from Dormant Finnhub:", data)
 
-        elif msg_type == "info":
-            # Sometimes Finnhub can send 'info' type messages with codes/warnings.
-            print("💬 Info message from Dormant Finnhub:", data)
+        # elif msg_type == "info":
+        #     # Sometimes Finnhub can send 'info' type messages with codes/warnings.
+        #     print("💬 Info message from Dormant Finnhub:", data)
 
-        else:
-            # If Finnhub sends something else, let's log it for debugging
-            print(f"💬 Received a message with unknown type '{msg_type}':", data)
+        # else:
+        #     # If Finnhub sends something else, let's log it for debugging
+        #     print(f"💬 Received a message with unknown type '{msg_type}':", data)
 
     except json.JSONDecodeError:
         print("❌ Received non-JSON message from Dormant Finnhub.")
@@ -179,12 +179,12 @@ async def rotate_subscriptions():
             # Update dormant_current_batch under lock
             async with dormant_subscription_lock:
                 dormant_current_batch = next_batch
-                print(f"🔄 Current batch updated to (Dormant): {dormant_current_batch}")
+                # print(f"🔄 Current batch updated to (Dormant): {dormant_current_batch}")
 
             await asyncio.sleep(DORMANT_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY)
 
         except asyncio.CancelledError:
-            print("❌ Rotation task cancelled (Dormant).")
+            print("✖️  Rotation task cancelled (Dormant).")
             break
         except Exception as e:
             print(f"❌ Error during subscription rotation (Dormant): {e}")
