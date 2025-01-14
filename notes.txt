@@ -201,7 +201,7 @@ sudo journalctl -u my-fastapi.service --no-pager		->Displays logs without pagina
 ❗Dormant Sub cache
 (To keep all stocks for all users (Active + Dormant) portfolio + all stocks in all user watchlist  (reqd. for init Active ltp for watchlist) + Temporary stocks from Active request (Will be removed in scheduled job run))
 
-Startup - Create and Add all stocks from all users Portfolio and 💻✅ all Watchlist (init ltp INITIAL_LTP_IN_CACHE)
+Startup - Create and Add all stocks from all users Portfolio and 💻✅ all Watchlist (init ltp INITIAL_PRICE_IN_CACHE)
 
 Login - None 
 
@@ -238,7 +238,7 @@ Login - None
 LTP Update - 💻 Finnhub wb rotation
 
 Runtime Add -  All handled by explicit FE message
-	NOTE: 💻✅ init - ltp from Dormant if stock exists and Dormant ltp != INITIAL_LTP_IN_CACHE ; if stock not in dormant then fetch ltp from Finnhub and add stock to dormant with ltp else if ltp == INITIAL_LTP_IN_CACHE fetch ltp by Finnhub API and update ltp in dormant)
+	NOTE: 💻✅ init - ltp from Dormant if stock exists and Dormant ltp != INITIAL_PRICE_IN_CACHE ; if stock not in dormant then fetch ltp from Finnhub and add stock to dormant with ltp else if ltp == INITIAL_PRICE_IN_CACHE fetch ltp by Finnhub API and update ltp in dormant)
 
 	* Trade (Stock Holding new symbol added) (Added from explicitly from FE msg),
 	* User add watchlist item (Added from explicitly from FE msg),

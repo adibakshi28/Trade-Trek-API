@@ -33,7 +33,7 @@ config = {
     "PORTFOLIO_SNAPSHOT_DELAY": 12,        # Portfolio snapshot every x minutes
     "MAX_STOCK_IN_WATCHLIST": 10,
     "STOCK_INDEX_TICKER": "SPY",
-    "INITIAL_LTP_IN_CACHE": -1,     # Initial LTP in (Active/Dormant) subscription cache indicating LTP not available yet (Keep it negative)
+    "INITIAL_PRICE_IN_CACHE": -1,     # Initial LTP in (Active/Dormant) subscription cache indicating LTP not available yet (Keep it negative)
     "ACTIVE_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY": 1,  # One batch of stock remains subscribed for x seconds (Should be more than FINNHUB_WEBSOCKET_MSG_DELAY)
     "ACTIVE_FINNHUB_WEBSOCKET_BATCH_SIZE": 48,       # Number of stocks to subscribe in one batch
     "DORMANT_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY": 3,  # One batch of stock remains subscribed for x seconds (Should be more than FINNHUB_WEBSOCKET_MSG_DELAY)

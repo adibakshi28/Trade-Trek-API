@@ -4,7 +4,7 @@ import random
 import pandas as pd
 from datetime import datetime, timedelta
 from app.models.database import supabase
-from app.core.cache import create_stock_universe_cache, remove_stock_from_dormant_user_stock_subscription_cache, add_update_to_dormant_user_stock_subscription_cache
+from app.core.cache import create_stock_universe_cache, remove_stock_from_dormant_user_stock_subscription_cache, add_update_to_dormant_user_stock_subscription_cache, initialize_refresh_dormant_user_stock_subscription_cache
 from app.core.config import config
 from app.models.sqlite_cache import get_from_table, execute_sql
 from app.services.real_time_service import real_time_service
@@ -68,6 +68,15 @@ def sync_snp500_constituents():
     except Exception as e:
         print(f"❌ [SCHEDULED JOB] Error in sync S&P 500 constituents from static csv: {e}")
 
+
+async def refresh_dormant_cache():
+    try:
+        print(f"🔄 [SCHEDULED JOB] Starting Refresh Dormant Cache sync job ...")
+        await initialize_refresh_dormant_user_stock_subscription_cache()
+        print(f"✅ [SCHEDULED JOB] Refresh Dormant Cache updated Successfully!")
+    except Exception as e:
+        print(f"❌ [SCHEDULED JOB] Error in Refresh Dormant Cache: {e}")
+
 async def fe_be_websocket_msg_broadcast():
     ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
     result = await get_from_table(ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE)
@@ -77,7 +86,7 @@ async def fe_be_websocket_msg_broadcast():
         msg = {
             "stock_ticker": stock[0],
             "ltp": stock[1],
-            "day_change": random.randint(-10, 10)
+            "day_change": stock[1] - stock[2],
         }
         message.append(msg)
     await real_time_service.broadcast(json.dumps(message))
@@ -136,7 +145,7 @@ async def sync_dormant_stock_subscription_cache():
             valid_tickers = {row[0] for row in valid_tickers_result} if valid_tickers_result else set()
             
             # Add new active tickers
-            insert_data = [(ticker, config["INITIAL_LTP_IN_CACHE"]) for ticker in valid_tickers]
+            insert_data = [(ticker, config["INITIAL_PRICE_IN_CACHE"]) for ticker in valid_tickers]
 
             if insert_data:
                 await add_update_to_dormant_user_stock_subscription_cache(insert_data)
@@ -206,7 +215,7 @@ async def calculate_portfolio_value():
                 execution_price = holding.get('execution_price', 0)
                 direction = holding.get('direction', 'BUY')
 
-                # If ltp is INITIAL_LTP_IN_CACHE (ie -ev) or stock_ticker not in dormant cache, set ltp to 0
+                # If ltp is INITIAL_PRICE_IN_CACHE (ie -ev) or stock_ticker not in dormant cache, set ltp to 0
                 ltp = stock_prices.get(stock_ticker, 0) if stock_prices.get(stock_ticker, 0) > 0 else 0
 
                 if quantity == 0 or ltp == 0:

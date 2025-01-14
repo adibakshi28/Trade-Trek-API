@@ -64,20 +64,27 @@ async def get_user_watchlist_service(user_id: int):
 
             # Batch query to fetch prices
             query_prices = f"""
-                SELECT stock_ticker, ltp
+                SELECT stock_ticker, ltp, previous_close
                 FROM {DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE}
                 WHERE stock_ticker IN ({tickers_placeholder});
             """
             results_prices = await execute_sql(query_prices, ())
 
-            # Create a mapping of stock_ticker to ltp (price)
-            price_map = {row[0]: row[1] for row in results_prices}
+            # Create mappings for ltp and previous_close
+            price_data_map = {
+                row[0]: {"ltp": row[1], "previous_close": row[2]} for row in results_prices
+            }
 
-            # Update watchlist_results with stock names and prices
+            # Update watchlist_results with stock names, prices, and day_change
             for item in watchlist_results:
                 stock_ticker = item['stock_ticker']
                 item['stock_name'] = stock_name_map.get(stock_ticker, stock_ticker)
-                item['price'] = price_map.get(stock_ticker, 0)
+                
+                # Default values if the stock_ticker is not found
+                price_data = price_data_map.get(stock_ticker, {"ltp": 0, "previous_close": 0})
+                
+                item['price'] = price_data["ltp"]
+                item['day_change'] = price_data["ltp"] - price_data["previous_close"]
 
         return watchlist_results
     except APIError as e:

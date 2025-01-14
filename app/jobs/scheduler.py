@@ -1,7 +1,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from app.jobs.tasks import update_stock_universe_cache, fe_be_websocket_msg_broadcast, sync_snp500_constituents, sync_dormant_stock_subscription_cache, calculate_portfolio_value, delete_stock_history, print_dormant
+from app.jobs.tasks import update_stock_universe_cache, fe_be_websocket_msg_broadcast, sync_snp500_constituents, sync_dormant_stock_subscription_cache, calculate_portfolio_value, delete_stock_history, refresh_dormant_cache, print_dormant
 from app.core.config import config
 import asyncio
 import atexit
@@ -24,6 +24,7 @@ def start_scheduler():
     scheduler.add_job(sync_snp500_constituents, CronTrigger(hour=2, minute=0, second=0, timezone=config["TIMEZONE"]), id="sync_snp500_constituents", replace_existing=True)
 
     # For running async functions
+    scheduler.add_job(run_async_job, CronTrigger(hour=9, minute=10, second=0, timezone=config["TIMEZONE"]), id="refresh_dormant_cache", replace_existing=True, args=[refresh_dormant_cache], max_instances=3)
     scheduler.add_job(run_async_job, IntervalTrigger(hours=24), id="update_stock_universe_cache", replace_existing=True, args=[update_stock_universe_cache], max_instances=3)
     scheduler.add_job(run_async_job, IntervalTrigger(seconds=config['FE_BE_WEBSOCKET_MSG_DELAY']), id="fe_be_websocket_msg_broadcast", replace_existing=True, args=[fe_be_websocket_msg_broadcast], max_instances=3)
     scheduler.add_job(run_async_job, IntervalTrigger(minutes=13), id="sync_dormant_stock_subscription_cache", replace_existing=True, args=[sync_dormant_stock_subscription_cache], max_instances=3)
