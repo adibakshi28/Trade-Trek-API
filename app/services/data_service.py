@@ -269,6 +269,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
     ALLOW_SHORT_SELLING = config.get("ALLOW_SHORT_SELLING")
     MAX_ASSETS_IN_PORTFOLIO = config.get("MAX_ASSETS_IN_PORTFOLIO")
     TRANSACTION_FEE = config.get("TRANSACTION_FEE")
+    INITIAL_PRICE_IN_CACHE = config.get("INITIAL_PRICE_IN_CACHE")
     try:
         if not await check_table_exists(STOCK_UNIVERSE_CACHE_TABLE):
             await create_stock_universe_cache()
@@ -344,6 +345,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
 
         # !: Fetch stock price (from API)
         price = await get_stock_quote(ticker)
+        previous_close = INITIAL_PRICE_IN_CACHE
     
         if not price:
             raise HTTPException(
@@ -352,6 +354,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
             )
         else:
             price = round(price['c'], 2)
+            previous_close = round(price['pc'], 2)
 
         # !: Check for sufficient cash balance (by calculating transaction value)
         cash = supabase.table("Cash").select("cash").eq("user_id", user_id).eq("is_active", True).execute()
@@ -554,7 +557,7 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
                 transactionInsertResponse = supabase.table("Transactions").insert(transaction).execute()
 
         # !: Add stock to Dormant Stock Subscription Cache (Would be removed in scheduled job if not required)
-        await add_update_to_dormant_user_stock_subscription_cache([(ticker, price)])
+        await add_update_to_dormant_user_stock_subscription_cache([(ticker, price, previous_close)])
 
         # !: Return transaction details, updated portfolio, and cash balance
         currentCash = supabase.table("Cash").select("cash").eq("user_id", user_id).eq("is_active", True).execute()
