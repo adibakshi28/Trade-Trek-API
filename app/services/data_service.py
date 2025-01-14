@@ -344,17 +344,17 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
             )
 
         # !: Fetch stock price (from API)
-        price = await get_stock_quote(ticker)
+        price_api = await get_stock_quote(ticker)
         previous_close = INITIAL_PRICE_IN_CACHE
     
-        if not price:
+        if not price_api:
             raise HTTPException(
                 status_code=400,
                 detail="Stock price not available right now. Please try again later."
             )
         else:
-            price = round(price['c'], 2)
-            previous_close = round(price['pc'], 2)
+            price = round(price_api['c'], 2)
+            previous_close = round(price_api['pc'], 2)
 
         # !: Check for sufficient cash balance (by calculating transaction value)
         cash = supabase.table("Cash").select("cash").eq("user_id", user_id).eq("is_active", True).execute()
