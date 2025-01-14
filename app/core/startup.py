@@ -194,7 +194,7 @@ def register_startup_events(app: FastAPI):
             validate_configuration(config=config)
             check_third_party_services(config=config)
             validate_db_connection()
-            invalidate_any_active_session()                   # Uncomment this line when pushing to production
+            # invalidate_any_active_session()                   # Uncomment this line when pushing to production
             await initlize_in_memory_cache()
             await startup_finnhub_websocket_connection()
             print("🚀 All Startup Checks Passed Successfully!")
