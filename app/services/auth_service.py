@@ -39,16 +39,33 @@ def register_user(first_name: str, last_name: str, email: str, username: str, pa
         inserted = response.data or []
     
         if inserted:
-            id = inserted[0].get("id")
+            try:
+                id = inserted[0].get("id")
 
-            data = {
-                "user_id": id,
-                "cash": round(config['INITIAL_CASH'], 2),
-                "is_active": True,
-            }
-            response = supabase.table("Cash").insert(data).execute()
+                data = {
+                    "user_id": id,
+                    "cash": round(config['INITIAL_CASH'], 2),
+                    "is_active": True,
+                }
+                response = supabase.table("Cash").insert(data).execute()
 
-            return inserted[0]
+                REGISTER_USER_WATCHLIST = config['REGISTER_USER_WATCHLIST']
+                if len(REGISTER_USER_WATCHLIST) > 0:
+                    watchlist_data = [
+                        {
+                            "user_id": id,
+                            "stock_ticker": stock_ticker,
+                            "is_active": True,
+                        }
+                        for stock_ticker in REGISTER_USER_WATCHLIST
+                    ]
+                    response = supabase.table("Watchlist").insert(watchlist_data).execute()
+                
+                return inserted[0]
+            except Exception as e:
+                # Rollback user insert
+                supabase.table("Users").delete().eq("id", id).execute()
+                raise e
         else:
             return None
     

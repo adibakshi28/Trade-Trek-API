@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.models.sqlite_cache import close_db 
-from app.core.websocket import close_finnhub_connection
+from app.core.websocket_active import close_finnhub_active_connection
+from app.core.websocket_dormant import close_finnhub_dormant_connection
 from app.services.real_time_service import real_time_service
 
 
@@ -20,8 +21,9 @@ async def close_finnhub_websocket_connection():
     Close Finnhub websocket connection gracefully.
     """
     try:
-        await close_finnhub_connection()
-        print("✅ Finnhub WebSocket closed successfully.")
+        await close_finnhub_active_connection()
+        await close_finnhub_dormant_connection()
+        print("✅ Finnhub WebSocket (Active & Dormant) closed successfully.")
     except Exception as e:
         print(f"❌ Failed to close Finnhub WebSocket: {e}")
 

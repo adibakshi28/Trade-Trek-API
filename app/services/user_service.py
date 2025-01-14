@@ -1,13 +1,15 @@
 # app/services/user_service.py
 
+from fastapi import HTTPException
 from typing import Optional, List, Dict, Any
 from postgrest import APIError
 
 from app.models.database import supabase
 from app.core.config import config
 from app.utils.finnhub import get_stock_quote
-from app.models.sqlite_cache import execute_sql
+from app.models.sqlite_cache import execute_sql, check_table_exists
 from app.models.sqlite_cache import get_from_table
+from app.core.cache import create_stock_universe_cache
 
 def user_funds_service(user_id: int):
     try:
@@ -27,6 +29,195 @@ def user_transactions_service(user_id: int):
     try:
         response = supabase.table("Transactions").select("id", "user_id", "stock_ticker", "direction", "quantity", "execution_price", "transaction_fee", "created_at").eq("user_id", user_id).eq("is_active", True).execute()
         return response.data or []
+    except APIError as e:
+        raise e
+    
+async def get_user_watchlist_service(user_id: int):
+    STOCK_UNIVERSE_CACHE_TABLE = config["STOCK_UNIVERSE_CACHE_TABLE"]
+    DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config["DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE"]
+
+    try:
+        watchlist_query = (
+            supabase.table("Watchlist")
+            .select("stock_ticker")
+            .eq("user_id", user_id)
+            .eq("is_active", True)
+            .execute()
+        )
+
+        watchlist_results = watchlist_query.data
+
+        stock_tickers = [item['stock_ticker'] for item in watchlist_results]
+
+        if stock_tickers:
+            # Batch query to fetch stock names
+            tickers_placeholder = ', '.join(f'"{ticker}"' for ticker in stock_tickers)
+            query_stock_names = f"""
+                SELECT stock_ticker, stock_name
+                FROM {STOCK_UNIVERSE_CACHE_TABLE}
+                WHERE stock_ticker IN ({tickers_placeholder});
+            """
+            results_stock_names = await execute_sql(query_stock_names, ())
+
+            # Create a mapping of stock_ticker to stock_name
+            stock_name_map = {row[0]: row[1] for row in results_stock_names}
+
+            # Batch query to fetch prices
+            query_prices = f"""
+                SELECT stock_ticker, ltp, previous_close
+                FROM {DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE}
+                WHERE stock_ticker IN ({tickers_placeholder});
+            """
+            results_prices = await execute_sql(query_prices, ())
+
+            # Create mappings for ltp and previous_close
+            price_data_map = {
+                row[0]: {"ltp": row[1], "previous_close": row[2]} for row in results_prices
+            }
+
+            # Update watchlist_results with stock names, prices, and day_change
+            for item in watchlist_results:
+                stock_ticker = item['stock_ticker']
+                item['stock_name'] = stock_name_map.get(stock_ticker, stock_ticker)
+                
+                # Default values if the stock_ticker is not found
+                price_data = price_data_map.get(stock_ticker, {"ltp": 0, "previous_close": 0})
+                
+                item['price'] = price_data["ltp"]
+                item['day_change'] = price_data["ltp"] - price_data["previous_close"]
+
+        return watchlist_results
+    except APIError as e:
+        raise e
+    
+async def add_to_user_watchlist_service(user_id: int, ticker: str):
+    STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
+    MAX_STOCK_IN_WATCHLIST = config.get("MAX_STOCK_IN_WATCHLIST")
+    try:
+        if not await check_table_exists(STOCK_UNIVERSE_CACHE_TABLE):
+            await create_stock_universe_cache()
+
+        ticker = ticker.upper()
+        query = f"""
+            SELECT stock_ticker, stock_name
+            FROM {STOCK_UNIVERSE_CACHE_TABLE}
+            WHERE stock_ticker = "{ticker}";
+        """
+        params = ()
+        results = await execute_sql(query, params)
+
+        if not results:
+            raise HTTPException(
+                status_code=404,
+                detail="Stock not found"
+            )
+        
+        # Check if stock already exists in user's active watchlist
+        watchlist_query = (
+            supabase.table("Watchlist")
+            .select("stock_ticker")
+            .eq("user_id", user_id)
+            .eq("is_active", True)
+            .execute()
+        )
+
+        watchlist_results = watchlist_query.data
+
+        if any(item['stock_ticker'] == ticker for item in watchlist_results):   
+            current_watchlist = await get_user_watchlist_service(user_id)
+
+            return {
+                "success": False,
+                "message": f"{ticker} already exists in your watchlist.",
+                "watchlist": current_watchlist
+            }
+        
+        if len(watchlist_results) >= MAX_STOCK_IN_WATCHLIST:
+            return {
+                "success": False,
+                "message": f"Maximum of {MAX_STOCK_IN_WATCHLIST} stocks allowed in watchlist.",
+            }
+
+        # Add stock to watchlist
+        response = (
+            supabase.table("Watchlist")
+            .insert({
+                "user_id": user_id,
+                "stock_ticker": ticker,
+                "is_active": True
+            })
+            .execute()
+        )
+
+        current_watchlist = await get_user_watchlist_service(user_id)
+
+        return {
+            "success": True,
+            "message": f"{ticker} added to your watchlist successfully.",
+            "watchlist": current_watchlist
+        }
+    except APIError as e:
+        raise e
+    
+async def remove_from_user_watchlist_service(user_id: int, ticker: str):
+    STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
+    try:
+        if not await check_table_exists(STOCK_UNIVERSE_CACHE_TABLE):
+            await create_stock_universe_cache()
+
+        ticker = ticker.upper()
+        query = f"""
+            SELECT stock_ticker, stock_name
+            FROM {STOCK_UNIVERSE_CACHE_TABLE}
+            WHERE stock_ticker = "{ticker}";
+        """
+        params = ()
+        results = await execute_sql(query, params)
+
+        if not results:
+            raise HTTPException(
+                status_code=404,
+                detail="Stock not found"
+            )
+        
+        # Check if stock exists in user's active watchlist
+        watchlist_query = (
+            supabase.table("Watchlist")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("stock_ticker", ticker)
+            .eq("is_active", True)
+            .execute()
+        )
+
+        watchlist_results = watchlist_query.data
+        if not watchlist_results:
+            current_watchlist = await get_user_watchlist_service(user_id)
+        
+            return {
+                "success": False,
+                "message": f"{ticker} not found in your watchlist.",
+                "watchlist": current_watchlist
+            }
+
+        # Update stock to set is_active to False
+        update_query = (
+            supabase.table("Watchlist")
+            .update({
+                "is_active": False
+            })
+            .eq("user_id", user_id).eq("stock_ticker", ticker).eq("is_active", True)
+            .execute()
+        )
+
+        current_watchlist = await get_user_watchlist_service(user_id)
+
+        return {
+            "success": True,
+            "message": f"{ticker} removed from your watchlist successfully.",
+            "watchlist": current_watchlist
+        }
+
     except APIError as e:
         raise e
     
@@ -59,9 +250,43 @@ async def user_portfolio_service(user_id: int):
 
         for p in portfolio:
             p["stock_name"] = stock_name_lookup.get(p["stock_ticker"], p["stock_ticker"])
+            p['direction'] = 'SHORT' if p['direction'] == 'SELL' else 'LONG'
         
         return portfolio
 
+    except APIError as e:
+        raise e
+    
+
+def user_portfolio_history_service(user_id: int):
+    try:
+        STOCK_INDEX_TICKER = config["STOCK_INDEX_TICKER"]
+
+        # Fetch user's portfolio history (Table indexed on user_id) (Not filtered by is_active to optimize query)
+        portfolio_history_response = supabase.table("Portfolio_History").select(
+            "holding_value", "unrealised_pnl", "cash", "timestamp"
+        ).eq("user_id", user_id).execute()
+
+        portfolio_history = portfolio_history_response.data or []
+        
+        if not portfolio_history:
+            return portfolio_history
+        
+        # Fetch stock index history (Table indexed on stock_ticker) (Not filtered by is_active to optimize query)
+        stock_index_history_response = supabase.table("Stock_History").select(
+            "price", "timestamp"
+        ).eq("stock_ticker", STOCK_INDEX_TICKER).execute()
+
+        stock_index_history_response = stock_index_history_response.data or []
+
+        response = {
+            "user_id": user_id,
+            "portfolio_history": portfolio_history,
+            "stock_index": STOCK_INDEX_TICKER,
+            "stock_index_history": stock_index_history_response
+        }
+
+        return response
     except APIError as e:
         raise e
 
@@ -154,8 +379,8 @@ async def user_trade_summary_service(user_id: int):
         ib = 0.0
         ts = {}
 
-        STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("STOCK_SUBSCRIPTION_CACHE_TABLE")
-        res = await get_from_table(STOCK_SUBSCRIPTION_CACHE_TABLE)
+        ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+        res = await get_from_table(ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE)
         stock_cache_dict = {row[0]: row[1] for row in res}
 
         for s, v in pos.items():

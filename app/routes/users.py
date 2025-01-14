@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from typing import List, Dict
 
 from app.middlewares.jwt_auth import require_active_session
-from app.services.user_service import user_transactions_service, user_funds_service, user_info_service, user_portfolio_service, user_trade_summary_service
+from app.services.user_service import user_transactions_service, user_funds_service, user_info_service, user_portfolio_service, user_trade_summary_service, get_user_watchlist_service, add_to_user_watchlist_service, remove_from_user_watchlist_service, user_portfolio_history_service
 
 router = APIRouter()
 
@@ -33,6 +33,15 @@ async def get_user_portfolio(payload: dict = Depends(require_active_session)) ->
     """
     user_id = payload.get("user_id")
     portfolio = await user_portfolio_service(user_id)
+    return portfolio
+
+@router.get("/portfolio/history")
+async def get_user_portfolio_history(payload: dict = Depends(require_active_session)) -> Dict:
+    """
+    Returns user portfolio history (Holding value, Unrealised P&L, Cash balance and Index value)
+    """
+    user_id = payload.get("user_id")
+    portfolio = user_portfolio_history_service(user_id)
     return portfolio
 
 @router.get("/funds")
@@ -68,5 +77,33 @@ async def get_user_dashboard(payload: dict = Depends(require_active_session)) ->
         "funds": funds,
     }
     return response
+
+@router.get("/watchlist")
+async def get_user_watchlist(payload: dict = Depends(require_active_session)) -> List[Dict]:
+    """
+    Returns the users watchlist
+    """
+    user_id = payload.get("user_id")
+    response = await get_user_watchlist_service(user_id)
+    return response
+
+@router.get("/watchlist/add")
+async def add_to_user_watchlist(ticker: str, payload: dict = Depends(require_active_session)) -> Dict:
+    """
+    Adds a stock to the users watchlist
+    """
+    user_id = payload.get("user_id")
+    response = await add_to_user_watchlist_service(user_id, ticker)
+    return response
+
+@router.get("/watchlist/remove")
+async def remove_from_user_watchlist(ticker: str, payload: dict = Depends(require_active_session)) -> Dict:
+    """
+    Removes a stock from the users watchlist
+    """
+    user_id = payload.get("user_id")
+    response = await remove_from_user_watchlist_service(user_id , ticker)
+    return response
+
 
 

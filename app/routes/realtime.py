@@ -1,5 +1,6 @@
 # app/routes/realtime.py
 
+import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from app.services.real_time_service import real_time_service
 from app.middlewares.jwt_auth import require_jwt_wb_auth, require_active_session
@@ -41,6 +42,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             while True:
                 data = await websocket.receive_text()
                 print(f"📨 Received data from user_id {user_id}: {data}")
+                
+                try:
+                    message_dict = json.loads(data)
+                    await real_time_service.handle_incoming_message(user_id, message_dict)
+                except json.JSONDecodeError as e:
+                    print(f"❌ Invalid JSON received from user_id {user_id}: {e}")
+
         except WebSocketDisconnect:
             # print(f"❌ WebSocket client disconnected (user_id: {user_id}).")
             await real_time_service.disconnect(user_id)

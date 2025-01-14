@@ -192,3 +192,77 @@ sudo journalctl -u my-fastapi.service		->Shows the service logs.
 sudo journalctl -u my-fastapi.service -f	->Tails the logs in real-time.
 sudo journalctl -u my-fastapi.service --since "1 hour ago"	->Shows logs from the last hour.
 sudo journalctl -u my-fastapi.service --no-pager		->Displays logs without pagination.
+
+
+
+
+
+
+❗Dormant Sub cache
+(To keep all stocks for all users (Active + Dormant) portfolio + all stocks in all user watchlist  (reqd. for init Active ltp for watchlist) + Temporary stocks from Active request (Will be removed in scheduled job run))
+
+Startup - Create and Add all stocks from all users Portfolio and 💻✅ all Watchlist (init ltp INITIAL_PRICE_IN_CACHE)
+
+Login - None 
+
+LTP Update - 💻 Twelve Data (Finnhub_2) wb rotation
+
+LTP init - At startup coroutine, use API (1.5 sec delay)
+
+Runtime Add - 
+    * Scheduled job (15 min) sync_dormant_stock_subscription_cache 
+    💻✅ Will add - All portfolio stocks and Watchlist stock (New added stocks in Holding and Watchlist)
+
+    * 💻 Whenver stock is added to Active (Add to Dormant if it dosent exist along with LTP from Active) (eg Watchlist add, Explicit FE)
+    (💻✅ Make a function(stock, ltp) to add to Dormant in Cache file. If stock exist in dormant, update its LTP )
+
+    *💻✅ Add stock from post transaction API (Everytime)
+
+Runtime Remove - Scheduled job (15 min) (Removes all stocks not in all user portfolios or 💻✅ all watchlists)
+
+💻✅ Create 2 function which using locks adds and removes stock from dormant. It take [(ticker, ltp)] as input
+(If stock dosent exist, add stock. If stock exits, update its ltp)
+Use the 2 functions from 1) create_and_populate_dormant_user_stock_subscription_cache(), 2) sync_dormant_stock_subscription_cache job()  
+
+
+
+
+
+❗Active Sub cache
+(To keep all stocks in active users portfolio + all stocks in active user watchlist + Explicit FE request)
+
+Startup - None (Just Create table)
+
+Login - None
+
+LTP Update - 💻 Finnhub wb rotation
+
+Runtime Add -  All handled by explicit FE message
+	NOTE: 💻✅ init - ltp from Dormant if stock exists and Dormant ltp != INITIAL_PRICE_IN_CACHE ; if stock not in dormant then fetch ltp from Finnhub and add stock to dormant with ltp else if ltp == INITIAL_PRICE_IN_CACHE fetch ltp by Finnhub API and update ltp in dormant)
+
+	* Trade (Stock Holding new symbol added) (Added from explicitly from FE msg),
+	* User add watchlist item (Added from explicitly from FE msg),
+	* Bulk Explicit FE request (eg, all stocks from user portfolio, all stocks from watchlist),
+	* Explicit FE request (eg, looking at stock detail info)
+
+Runtime Remove - All handled by explicit FE message
+    
+    * FE wb connection lost,  (Remove all stocks subscribed for that user)
+    * Trade (Stock Holding active flag false), 
+    * Watchlist stock removal
+    * FE explicit removal request (removing user from user from user_subscribers list and deleting row if user_subscribers length = 0)
+
+
+
+
+NOTE: It is possible that a stock is in Active but not in Dormant (eg, in case of explicit FE request)
+(In all those cases init fetch LTP via API and add stock to Dormant with ltp)
+
+NOTE: From FE open wb connection at app start and subscribe/unsubscribe to stocks as needed (Updates will be quick as API call are minimal, show prices only after receiving 2 wb msgs)
+Adding to Active will be done via FE msgs and not automatically
+Removing from Active will also be done by FE msg (In case user disconnects all its scubscibed stocks are lost)
+
+NOTE: In current setup if users sells a stock, it will still remain in Active for his user ID and will not be removed until he disconnects
+
+NOTE: We add stock to Dormant everytime from post transaction - Portfolio snapshot will be correct, - No API call in adding to Active
+(It will anyway be removed in sync job if not reqd)

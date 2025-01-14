@@ -1,165 +1,309 @@
 import asyncio
 import json
+import random
+import pandas as pd
+from datetime import datetime, timedelta
 from app.models.database import supabase
-from app.utils.finnhub import get_stock_symbols, get_crypto_symbols, get_forex_symbols
-from app.core.cache import create_stock_universe_cache
+from app.core.cache import create_stock_universe_cache, remove_stock_from_dormant_user_stock_subscription_cache, add_update_to_dormant_user_stock_subscription_cache, initialize_refresh_dormant_user_stock_subscription_cache
 from app.core.config import config
-from datetime import datetime
-from app.models.sqlite_cache import get_from_table, get_cache
+from app.models.sqlite_cache import get_from_table, execute_sql
 from app.services.real_time_service import real_time_service
+from app.utils.finnhub import get_stock_quote, get_market_status
 
 
-def another_task():
-    print(f"[SCHEDULED JOB] Cron Job dummy {datetime.now()}")
+async def print_dormant():
+    try:
+        print("..............................................................................................")
+        ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+        result = await get_from_table(ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE)
+        print(f"🔄 [SCHEDULED JOB] ACTIVE User Stock Subscription Cache: {result}")
+        print("..............................................................................................")
+        DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+        result = await get_from_table(DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE)
+        print(f"🔄 [SCHEDULED JOB] DORMANT User Stock Subscription Cache: {result}")
+        print("..............................................................................................")
+    except Exception as e:
+        print(f"❌ [SCHEDULED JOB] Error in print_ACTIVE: {e}")
+    
 
-async def print_stock_subscription_table():
-    print(f"🔄 [SCHEDULED JOB] Starting Print Stock subscription cache table job ...")
-    STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("STOCK_SUBSCRIPTION_CACHE_TABLE")
-    result = await get_from_table(STOCK_SUBSCRIPTION_CACHE_TABLE)
-    print(result)
+def sync_snp500_constituents():
+    try:
+        print(f"🔄 [SCHEDULED JOB] Starting sync S&P 500 constituents from static csv job ...")
+        
+        csv_file = "app/static/snp500_constituents.csv"
+        df = pd.read_csv(csv_file)
+        
+        df = df.rename(columns={
+            'Symbol': 'stock_ticker',
+            'Security': 'stock_name',
+            'GICS Sector': 'sector',
+            'GICS Sub-Industry': 'sub_sector',
+            'Headquarters Location': 'headquarters_location',
+            'Date added': 'date_added',
+            'Founded': 'year_founded'
+        })
 
-    NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY = config['NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY']
-    active_websockets = await get_cache(NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY)
-    print(f"Active Websockets Connections: {active_websockets}")
+        df = df[['stock_ticker', 'stock_name', 'sector', 'sub_sector',
+                 'headquarters_location', 'date_added', 'year_founded']]
 
-    print(f"✅ [SCHEDULED JOB] Completed Print Stock subscription cache table job!")
+        df = df.where(pd.notnull(df), None)
+        
+        existing_data = supabase.table("SnP_500_Constituents").select("stock_ticker").execute()
+        existing_tickers = set(row['stock_ticker'] for row in existing_data.data)
+        new_tickers = set(df['stock_ticker'].tolist())
+
+        # Find tickers to delete
+        tickers_to_delete = existing_tickers - new_tickers
+
+        # Delete removed tickers
+        if tickers_to_delete:
+            supabase.table("SnP_500_Constituents").delete().in_("stock_ticker", list(tickers_to_delete)).execute()
+
+        # Upsert new/updated rows
+        data = df.to_dict(orient='records')
+        supabase.table("SnP_500_Constituents").upsert(data).execute()
+        
+        print(f"✅ [SCHEDULED JOB] Completed sync S&P 500 constituents from static csv job! (deleted: {len(tickers_to_delete)}, upserted: {len(data)})")
+    
+    except Exception as e:
+        print(f"❌ [SCHEDULED JOB] Error in sync S&P 500 constituents from static csv: {e}")
+
+
+async def refresh_dormant_cache():
+    try:
+        print(f"🔄 [SCHEDULED JOB] Starting Refresh Dormant Cache sync job ...")
+        await initialize_refresh_dormant_user_stock_subscription_cache()
+        print(f"✅ [SCHEDULED JOB] Refresh Dormant Cache updated Successfully!")
+    except Exception as e:
+        print(f"❌ [SCHEDULED JOB] Error in Refresh Dormant Cache: {e}")
 
 async def fe_be_websocket_msg_broadcast():
-    STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("STOCK_SUBSCRIPTION_CACHE_TABLE")
-    result = await get_from_table(STOCK_SUBSCRIPTION_CACHE_TABLE)
+    ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+    result = await get_from_table(ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE)
     # Broadcast msg to frontend
     message = []
     for stock in result:
         msg = {
             "stock_ticker": stock[0],
-            "ltp": stock[1]
+            "ltp": stock[1],
+            "day_change": stock[1] - stock[2],
         }
         message.append(msg)
     await real_time_service.broadcast(json.dumps(message))
-
-    # NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY = config['NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY']
-    # active_websockets = await get_cache(NUMBER_OF_ACTIVE_WEBSOCKET_CACHE_KEY)
-    # print(f"Active Websockets Connections: {active_websockets}")
 
 async def update_stock_universe_cache():
     print(f"🔄 [SCHEDULED JOB] Starting Update Stock Universe sync job ...")
     await create_stock_universe_cache()
     print(f"✅ [SCHEDULED JOB] Stock Universe Cache updated Successfully!")
 
-def sync_stock_universe():
+
+async def sync_dormant_stock_subscription_cache():
     """
-    Fetch stock, crypto, and forex symbols from Finnhub and update the Stock_Universe 
-    table efficiently in batches. Only update records if there are changes.
+    Synchronize the Dormant User Stock Subscription Cache.
+    Remove stock tickers from the dormant cache that are no longer active in the Holdings table or Watchlist table.
+    Add stock tickers to the dormant cache that are active in the Holdings table or Watchlist table but not in the dormant cache.
     """
-    BATCH_SIZE = 100
     try:
-        print(f"🔄 [SCHEDULED JOB] Starting Stock Universe Sync Job...")
+        print(f"🔄 [SCHEDULED JOB] Starting Sync Dormant Stock Subscription Cache job ...")
+        
+        DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+        STOCK_UNIVERSE_CACHE_TABLE = config.get("STOCK_UNIVERSE_CACHE_TABLE")
 
-        # 1) Fetch data from API (can be done sequentially or concurrently)
-        #    Here, we'll just do sequential for clarity, but you could also run them concurrently with asyncio.gather
-        stock_data = asyncio.run(get_stock_symbols(config["STOCK_EXCHANGE"]))   # asset_type = STOCK
-        crypto_data = asyncio.run(get_crypto_symbols(config["CRYPTO_EXCHANGE"]))  # asset_type = CRYPTO
-        forex_data = asyncio.run(get_forex_symbols(config["FOREX_EXCHANGE"]))   # asset_type = FOREX
+        # Fetch active tickers from Holdings
+        holdings_response = supabase.table("Holdings").select("stock_ticker").eq("is_active", True).execute()
+        active_tickers_portfolio = {row['stock_ticker'] for row in holdings_response.data if row.get('stock_ticker')}
 
-        # 2) If any call fails or returns None/empty, you may decide how to handle it
-        if not stock_data and not crypto_data and not forex_data:
-            raise ValueError(f"❌ [SCHEDULED JOB] No data fetched from Finnhub for stock/crypto/forex.")
+        # Fetch active tickers from Watchlist
+        watchlist_response = supabase.table("Watchlist").select("stock_ticker").eq("is_active", True).execute()
+        active_tickers_watchlist = {row['stock_ticker'] for row in watchlist_response.data if row.get('stock_ticker')}
 
-        # 3) Tag each record with asset_type and the correct exchange
-        #    (If the Finnhub API already returns the exchange field, you can override or leave it.)
-        #    This depends on your use case. For demonstration, we'll just set them from config.
-        for item in stock_data:
-            item["asset_type"] = "STOCK"
-            item["exchange"]   = config["STOCK_EXCHANGE"]
-        for item in crypto_data:
-            item["asset_type"] = "CRYPTO"
-            item["exchange"]   = config["CRYPTO_EXCHANGE"]
-        for item in forex_data:
-            item["asset_type"] = "FOREX"
-            item["exchange"]   = config["FOREX_EXCHANGE"]
+        # Combine active tickers
+        active_tickers = active_tickers_portfolio.union(active_tickers_watchlist)
 
-        # Combine all into a single universe_data list
-        universe_data = stock_data + crypto_data + forex_data
+        # Fetch current dormant tickers
+        dormant_query = f"SELECT stock_ticker FROM {DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE};"
+        dormant_result = await execute_sql(dormant_query)
+        dormant_tickers = {row[0] for row in dormant_result} if dormant_result else set()
 
-        # 4) Prepare the final list of tickers we care about
-        universe_ticker_list = [x.get("symbol") for x in universe_data if x.get("symbol")]
+        # Determine tickers to remove and add
+        tickers_to_remove = dormant_tickers - active_tickers
+        tickers_to_add = active_tickers - dormant_tickers
 
-        # If still no data, bail out
-        if not universe_ticker_list:
-            raise ValueError("❌ [SCHEDULED JOB] No symbol entries found after combining stock/crypto/forex.")
+        # Remove inactive tickers
+        if tickers_to_remove:
+            await remove_stock_from_dormant_user_stock_subscription_cache(list(tickers_to_remove))
 
-        # 5) For existing records, fetch them in batches to avoid query size limits
-        existing_tickers = set()
-        existing_stock_data = {}
-        for i in range(0, len(universe_ticker_list), BATCH_SIZE):
-            batch = universe_ticker_list[i : i + BATCH_SIZE]
-            existing_stocks_response = (
-                supabase.table("Stock_Universe")
-                .select("stock_ticker, stock_name, currency, exchange, asset_type, is_active")
-                .in_("stock_ticker", batch)
-                .execute()
-            )
-            for item in existing_stocks_response.data or []:
-                ticker = item["stock_ticker"]
-                existing_tickers.add(ticker)
-                existing_stock_data[ticker] = item
+        if tickers_to_add:
+            # Check if the tickers are valid                  
+            placeholders = ', '.join(['?'] * len(tickers_to_add))
+            universe_query = f"""
+                SELECT stock_ticker 
+                FROM {STOCK_UNIVERSE_CACHE_TABLE}
+                WHERE stock_ticker IN ({placeholders})
+            """
+            valid_tickers_result = await execute_sql(universe_query, list(tickers_to_add))
+            valid_tickers = {row[0] for row in valid_tickers_result} if valid_tickers_result else set()
+            
+            # Add new active tickers
+            insert_data = [(ticker, config["INITIAL_PRICE_IN_CACHE"]) for ticker in valid_tickers]
 
-        # 6) Process each fetched symbol and figure out which ones need to be inserted or updated
-        new_records = []
-        updated_records = []
-        current_time = datetime.utcnow().isoformat()
+            if insert_data:
+                await add_update_to_dormant_user_stock_subscription_cache(insert_data)
 
-        for item in universe_data:
-            ticker = item.get("symbol")
-            if not ticker:
-                continue
+        # print("[SCHEDULED JOB] Added: ", insert_data)
+        # print("[SCHEDULED JOB] Removed: ", tickers_to_remove)
 
-            # Prepare the record for our DB
-            api_data = {
-                "stock_ticker": ticker,
-                "stock_name":    item.get("description"),
-                "currency":      item.get("currency"),
-                "exchange":      item.get("exchange"),
-                "asset_type":    item.get("asset_type"),
-                "is_active":     True,  # or some logic if you want to mark inactive
-                "updated_at":    current_time
+        print(f"✅ [SCHEDULED JOB] Dormant Stock Subscription Cache synchronized successfully! (deleted: {len(tickers_to_remove)}, added: {len(insert_data)})")
+    except Exception as e:
+        print(f"❌ [SCHEDULED JOB] Error in Sync Dormant Stock Subscription Cache: {e}")
+        raise e
+
+async def calculate_portfolio_value():
+    """
+    Works only if the market is open.
+    Calculate portfolio value, unrealised PNL, and cash for all users.
+    Updates Portfolio_History with the calculated values and Stock_History with the latest stock prices. 
+    (using dormant stock subscription cache)
+    """
+    try:
+        print(f"🔄 [SCHEDULED JOB] Starting Calculate Portfolio Value job ...")
+
+        DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config["DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE"]
+        STOCK_INDEX_TICKER = config["STOCK_INDEX_TICKER"]
+        TIMEZONE = config["TIMEZONE"]
+        FINNHUB_STOCK_EXCHANGE = config["FINNHUB_STOCK_EXCHANGE"]
+
+        # Check if the market is open
+        market_status = await get_market_status(FINNHUB_STOCK_EXCHANGE)
+
+        if not market_status['isOpen']:
+            print(f"✅ [SCHEDULED JOB] {FINNHUB_STOCK_EXCHANGE} Market is closed. Skipping Calculate Portfolio Value job.")
+            return
+
+        users_response = supabase.table("Users").select(
+            "id"
+        ).eq("is_active", True).execute()
+
+        active_users = [row['id'] for row in users_response.data]
+
+        # Fetch all stock tickers and their ltp from the dormant cache
+        stock_prices_query = f"""
+            SELECT stock_ticker, ltp
+            FROM {DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE}
+        """
+        stock_prices_result = await execute_sql(stock_prices_query)
+        stock_prices = {row[0]: row[1] for row in stock_prices_result} if stock_prices_result else {}
+
+        # Fetch user holdings and calculate portfolio value and unrealised PNL
+        holdings_response = supabase.table("Holdings").select(
+            "user_id, stock_ticker, quantity, execution_price, direction"
+        ).eq("is_active", True).execute()
+
+        user_portfolio = {}
+        user_unrealised_pnl = {}
+
+        # Initialize all users with 0 in case they have no holdings
+        for user_id in active_users:
+            user_portfolio[user_id] = 0
+            user_unrealised_pnl[user_id] = 0
+
+        if holdings_response.data:
+            for holding in holdings_response.data:
+                user_id = holding['user_id']
+                stock_ticker = holding['stock_ticker']
+                quantity = holding.get('quantity', 0)
+                execution_price = holding.get('execution_price', 0)
+                direction = holding.get('direction', 'BUY')
+
+                # If ltp is INITIAL_PRICE_IN_CACHE (ie -ev) or stock_ticker not in dormant cache, set ltp to 0
+                ltp = stock_prices.get(stock_ticker, 0) if stock_prices.get(stock_ticker, 0) > 0 else 0
+
+                if quantity == 0 or ltp == 0:
+                    continue
+
+                # Calculate holding value
+                holding_value = ltp * quantity
+                user_portfolio[user_id] += holding_value
+
+                # Calculate Unrealised PNL
+                if direction == 'BUY':
+                    unrealised_pnl = (ltp - execution_price) * quantity
+                elif direction == 'SELL':
+                    unrealised_pnl = (execution_price - ltp) * quantity
+                else:
+                    unrealised_pnl = 0
+
+                user_unrealised_pnl[user_id] += unrealised_pnl
+
+        # Fetch user cash balances from Cash table
+        cash_response = supabase.table("Cash").select(
+            "user_id, cash"
+        ).eq("is_active", True).execute()
+
+        user_cash = {row['user_id']: row['cash'] for row in cash_response.data} if cash_response.data else {}
+
+        for user_id in active_users:
+            if user_id not in user_cash:
+                user_cash[user_id] = 0
+
+        # Insert into Portfolio_History table with calculated values
+        portfolio_data = [
+            {
+                "user_id": user_id,
+                "holding_value": user_portfolio[user_id],
+                "unrealised_pnl": user_unrealised_pnl[user_id],
+                "cash": user_cash[user_id],
+                "timestamp": datetime.now(TIMEZONE).isoformat()
             }
+            for user_id in active_users
+        ]
 
-            if ticker in existing_tickers:
-                # Already in DB, check if we need to update any fields
-                db_data = existing_stock_data[ticker]
-                if (
-                    db_data["stock_name"] != api_data["stock_name"]
-                    or db_data["currency"] != api_data["currency"]
-                    or db_data["exchange"] != api_data["exchange"]
-                    or db_data["asset_type"] != api_data["asset_type"]
-                    or db_data["is_active"] != api_data["is_active"]
-                ):
-                    updated_records.append(api_data)
-            else:
-                # Brand new record
-                api_data["created_at"] = current_time
-                new_records.append(api_data)
+        if portfolio_data:
+            supabase.table("Portfolio_History").insert(portfolio_data).execute()
 
-        # 7) Batch update existing records that have changes
-        if updated_records:
-            for i in range(0, len(updated_records), BATCH_SIZE):
-                batch = updated_records[i : i + BATCH_SIZE]
-                supabase.table("Stock_Universe") \
-                    .upsert(batch, on_conflict=["stock_ticker"]) \
-                    .execute()
-            print(f"✅ [SCHEDULED JOB] Updated {len(updated_records)} records (STOCK/CRYPTO/FOREX) with changes.")
 
-        # 8) Batch insert new records
-        if new_records:
-            for i in range(0, len(new_records), BATCH_SIZE):
-                batch = new_records[i : i + BATCH_SIZE]
-                supabase.table("Stock_Universe") \
-                    .insert(batch) \
-                    .execute()
-            print(f"✅ [SCHEDULED JOB] Added {len(new_records)} new records (STOCK/CRYPTO/FOREX).")
+        # Get the price of STOCK_INDEX_TICKER
+        index_price = await get_stock_quote(STOCK_INDEX_TICKER)
+        index_price = index_price['c'] if index_price else 0
+        stock_prices[STOCK_INDEX_TICKER] = index_price
 
-        print(f"✅ [SCHEDULED JOB] Stock/Crypto/Forex Universe Sync Job Completed Successfully!")
+        # Insert into Stock_History with the latest stock prices
+        stock_history_data = [
+            {
+                "stock_ticker": ticker,
+                "price": price,
+                "timestamp": datetime.now(TIMEZONE).isoformat()
+            }
+            for ticker, price in stock_prices.items()
+        ]
+
+        if stock_history_data:
+            supabase.table("Stock_History").insert(stock_history_data).execute()
+
+        print(f"✅ [SCHEDULED JOB] Calculate Portfolio Value job Completed Successfully! Inserted {len(portfolio_data)} portfolio snapshots and {len(stock_history_data)} stock prices.")
 
     except Exception as e:
-        print(f"❌ [SCHEDULED JOB] Stock Universe Sync Job Failed: {e}")
+        print(f"❌ [SCHEDULED JOB] Error in Calculate Portfolio Value job: {e}")
+        raise e
+
+
+async def delete_stock_history():
+    """
+    Delete all stock LTP records older than 30 days from the Stock_History.
+    """
+    try:
+        print(f"🔄 [SCHEDULED JOB] Starting Delete Stock History older than 30 days job ...")
+        
+        TIMEZONE = config["TIMEZONE"]
+        thirty_days_ago = (datetime.now(TIMEZONE) - timedelta(days=30)).isoformat()
+        
+        response_stock = supabase.table("Stock_History") \
+            .delete() \
+            .filter("timestamp", "lt", thirty_days_ago) \
+            .execute()
+                
+        print(f"✅ [SCHEDULED JOB] Delete Stock History older than 30 days job Completed Successfully! Deleted {len(response_stock.data)} records.")
+    
+    except Exception as e:
+        print(f"❌ [SCHEDULED JOB] Error in Delete Stock History job: {e}")
+        raise e
