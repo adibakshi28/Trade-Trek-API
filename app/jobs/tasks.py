@@ -69,13 +69,18 @@ def sync_snp500_constituents():
         print(f"❌ [SCHEDULED JOB] Error in sync S&P 500 constituents from static csv: {e}")
 
 
-async def refresh_dormant_cache():
+async def refresh_dormant_cache_at_market_start():
     try:
-        print(f"🔄 [SCHEDULED JOB] Starting Refresh Dormant Cache sync job ...")
-        await initialize_refresh_dormant_user_stock_subscription_cache()
-        print(f"✅ [SCHEDULED JOB] Refresh Dormant Cache updated Successfully!")
+        print(f"🔄 [SCHEDULED JOB] Starting Refresh Dormant Cache at market start sync job ...")
+        DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
+        update_query = f"""
+            UPDATE {DORMANT_USER_STOCK_SUBSCRIPTION_CACHE_TABLE} 
+            SET previous_close = ltp
+        """
+        await execute_sql(update_query)
+        print(f"✅ [SCHEDULED JOB] Refresh Dormant Cache at market start updated Successfully!")
     except Exception as e:
-        print(f"❌ [SCHEDULED JOB] Error in Refresh Dormant Cache: {e}")
+        print(f"❌ [SCHEDULED JOB] Error in Refresh Dormant Cache at market start: {e}")
 
 async def fe_be_websocket_msg_broadcast():
     ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE = config.get("ACTIVE_USER_STOCK_SUBSCRIPTION_CACHE_TABLE")
