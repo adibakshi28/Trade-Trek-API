@@ -1,12 +1,14 @@
 import os
 from pytz import timezone
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
 load_dotenv()
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 FINNHUB_API_KEY_2 = os.getenv("FINNHUB_API_KEY_2")       # Dormant stock sub ltp updates 
 TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY")   # For Historical Data 
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")         # For AI Assistant
 
 config = {
     "FINNHUB_API_BASE_URL": "https://finnhub.io/api/v1/",
@@ -39,4 +41,10 @@ config = {
     "DORMANT_FINNHUB_WEBSOCKET_ROTATION_FREQUENCY": 3,  # One batch of stock remains subscribed for x seconds (Should be more than FINNHUB_WEBSOCKET_MSG_DELAY)
     "DORMANT_FINNHUB_WEBSOCKET_BATCH_SIZE": 48,       # Number of stocks to subscribe in one batch
     "REGISTER_USER_WATCHLIST": ['AAPL', "MSFT", "NVDA", "TSLA", "GS"],  # list of stock symbols to be added to watchlist of new users 
+    "ALLOWED_HISTORICAL_RESOLUTIONS": ["15min", "1h", "1day"],
+    "HISTORICAL_DATA_STALENESS": {"15min": timedelta(hours=2), "1h": timedelta(hours=6), "1day": timedelta(days=3)},
+    "HISTORICAL_DATA_TIME_HORIZON": {"15min": timedelta(days=45), "1h": timedelta(days=180), "1day": timedelta(days=1100)} 
 }
+
+
+# Valid Resolutions: ["1min", "5min", "15min", "30min", "45min", "1h", "2h", "4h", "1day", "1week", "1month"]

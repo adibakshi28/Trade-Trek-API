@@ -266,3 +266,217 @@ NOTE: In current setup if users sells a stock, it will still remain in Active fo
 
 NOTE: We add stock to Dormant everytime from post transaction - Portfolio snapshot will be correct, - No API call in adding to Active
 (It will anyway be removed in sync job if not reqd)
+
+
+
+Volatility Measures:
+- Standard Devation
+- Beta
+- VaR
+- ES
+
+Correlation and Diversification
+- Correlation cofficient
+- R-squared
+- Tracking Error
+
+Drawdown Measures
+- MDD
+- Average drawdown
+- Recovery time
+
+Tail Risk
+- Skewness
+- Kurtosis
+
+Risk Adjusted Performance
+- Sharpe ratio
+- IR
+
+Distribution
+- Sector Distribution (Pie Chart)
+- HHI 
+
+- Optimal allocation based on MPT
+
+LLM to feed in all the numbers and advice
+
+
+
+{
+  "timeframe": {
+    "start_date": "2023-01-01",
+    "end_date": "2024-01-01"
+  },
+  "resolution": "1day",
+  "benchmark": "SPY",                // Global benchmark
+  "metrics": {
+    "volatility_measures": {
+      "enable": true,
+      "measures": ["standard_deviation", "beta", "var", "es"], // Specify specific volatility metrics
+      "rolling_window": 30,             // Rolling window for standard deviation
+      "historical_period": "1Y",        // Lookback period for historical calculations
+      "time_series": ["standard_deviation", "var", "es"] // Include time series for specific metrics
+      "var_es_settings": {              // Local settings for VaR and ES
+        "periods": "1D",                // Specify the periods for VaR/ES (e.g., daily, hourly)
+        "resolution": "1h",         // Local data resolution for VaR/ES calculations
+        "confidence_level": 0.95,       // Confidence level for VaR and ES
+        "method": "historical",         // VaR calculation method (historical, parametric, monte_carlo)
+      }
+    },
+    "correlation_diversification": {
+      "enable": true,
+      "measures": ["correlation_coefficient", "r_squared", "tracking_error"], // Specific metrics
+      "benchmark": "SPY",                // Benchmark for correlation and diversification
+      "stocks_to_compare": ["AAPL", "GOOGL", "AMZN"], // Optional stocks for pairwise correlation
+      "correlation_method": "pearson"    // Correlation calculation method
+      "time_series": ["tracking_error"] // Include tracking error trends
+    },
+    "drawdown_measures": {
+      "enable": true,
+      "measures": ["mdd", "average_drawdown", "recovery_time"], // Specific drawdown metrics
+      "rolling_drawdown_window": 30,     // Rolling period for drawdown calculations
+      "event_highlighting": true         // Highlight specific drawdown events
+      "time_series": ["mdd"]              // Include time series data for maximum drawdown
+    },
+    "tail_risk": {
+      "enable": true,
+      "measures": ["skewness", "kurtosis"], // Specific tail risk metrics
+      "threshold_percentile": 0.01,        // Custom tail threshold (e.g., 1%)
+      "distribution_model": "empirical"    // Tail risk calculation model
+      "time_series": []                    // Tail risk typically doesn't require time series
+    },
+    "risk_adjusted_performance": {
+      "enable": true,
+      "measures": ["sharpe_ratio", "information_ratio"], // Specific risk-adjusted metrics
+      "benchmark": "SPY",                // Benchmark for Sharpe and information ratios
+      "risk_free_rate": 0.03,            // Risk-free rate for Sharpe and Treynor ratios
+      "comparison_periods": ["1Y", "3Y"], // Compare performance over multiple periods
+      "adjust_benchmark_weights": false  // Allow custom benchmark weighting
+      "time_series": ["sharpe_ratio"]    // Include time series for Sharpe ratio
+    },
+    "distribution": {
+      "enable": true,
+      "measures": ["sector_distribution", "hhi"], // Include specific distribution metrics
+      "sector_breakdown": true,          // Provide sector-level breakdown
+      "hhi_analysis": true,              // Include Herfindahl-Hirschman Index
+      "custom_grouping": {               // Custom sector/group mapping
+        "Tech Stocks": ["AAPL", "MSFT", "GOOGL"],
+        "Consumer": ["AMZN", "TSLA"]
+      },
+      "visualization_type": "pie"        // Type of visualization for distribution metrics
+      "time_series": []                  // Distribution metrics are static; no time series required
+    },
+    "portfolio_optimization": {
+      "enable": true,
+      "measures": ["optimal_allocation"], // Specify portfolio optimization outputs
+      "goal": "maximize_sharpe",         // Optimization goal
+      "constraints": {
+        "min_allocation": 0.05,          // Minimum allocation for any stock
+        "max_allocation": 0.50           // Maximum allocation for any stock
+      },
+      "target_volatility": 0.2,          // Target portfolio volatility
+      "min_return_constraint": 0.1,      // Minimum return constraint
+      "include_transaction_costs": true, // Include transaction costs in optimization
+      "transaction_costs": 0.01  // Transaction cost to include
+      "rebalance_frequency": "monthly",  // Frequency of portfolio rebalancing
+      "risk_free_rate": 0.03             // Risk-free rate for optimization calculations
+      "time_series": []                  // Optimization typically doesn't require time series data
+    }
+  },
+  "settings": {
+    "return_type": "arithmetic",         // Return calculation method (arithmetic or geometric)
+    "include_portfolio": true,           // Include current user portfolio
+    "include_benchmark_trend": true,     // Include benchmark performance trend in results
+    "calculate_stock_level_metrics": true, // Enable stock-level metric calculations
+    "stock_level_metrics": ["beta", "sharpe_ratio", "var"] // Specify stock-level metrics
+  }
+}
+
+
+Example................................................................
+
+
+{
+  "timeframe": {
+    "start_date": "2023-01-01",
+    "end_date": "2024-01-01"
+  },
+  "resolution": "1day",
+  "benchmark": "SPY",
+  "metrics": {
+    "volatility_measures": {
+      "enable": false,
+      "measures": ["standard_deviation", "beta", "var", "es"],
+      "rolling_window": 30,
+      "historical_period": "1Y",
+      "time_series": ["standard_deviation", "var", "es"],
+      "var_es_settings": {
+        "periods": "1D",
+        "resolution": "1h",
+        "confidence_level": 0.95,
+        "method": "historical"
+      }
+    },
+    "correlation_diversification": {
+      "enable": false,
+      "measures": ["correlation_coefficient", "r_squared", "tracking_error"],
+      "benchmark": "SPY",
+      "correlation_method": "pearson"
+    },
+    "drawdown_measures": {
+      "enable": false,
+      "measures": ["mdd", "average_drawdown", "recovery_time"],
+      "rolling_drawdown_window": 30,
+      "event_highlighting": true,
+      "time_series": ["mdd"]
+    },
+    "tail_risk": {
+      "enable": false,
+      "measures": ["skewness", "kurtosis"],
+      "threshold_percentile": 0.01,
+      "distribution_model": "empirical",
+      "time_series": []
+    },
+    "risk_adjusted_performance": {
+      "enable": false,
+      "measures": ["sharpe_ratio", "information_ratio"],
+      "benchmark": "SPY",
+      "risk_free_rate": 0.03,
+      "comparison_periods": ["1M", "1Y", "3Y"],
+      "adjust_benchmark_weights": false,
+      "rolling_sharpe_window": 30,
+      "time_series": []
+    },
+    "distribution": {
+      "enable": false,
+      "measures": ["sector_distribution", "hhi"],
+      "sector_breakdown": true,
+      "hhi_analysis": true,
+      "time_series": []
+    },
+    "portfolio_optimization": {
+      "enable": false,
+      "measures": ["optimal_allocation"],
+      "goal": "maximize_return",
+      "constraints": {
+        "min_allocation": 0.05,
+        "max_allocation": 0.50
+      },
+      "target_volatility": 0.2,
+      "min_return_constraint": 0.1,
+      "include_transaction_costs": true,
+      "transaction_costs": 0.01,
+      "rebalance_frequency": "monthly",
+      "risk_free_rate": 0.03,
+      "time_series": []
+    }
+  },
+  "settings": {
+    "return_type": "arithmetic",
+    "include_portfolio": false,
+    "include_benchmark_trend": false
+  }
+}
+
+

@@ -5,6 +5,7 @@ import yfinance as yf
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from typing import List, Optional
+from dateutil.parser import isoparse
 
 from app.core.config import config
 from app.models.database import supabase
@@ -75,17 +76,76 @@ async def stock_quote_service (ticker: str):
         raise ex
 
 
+async def _fetch_and_store_data(ticker: str, start_date: str, end_date: str, resolution: str):
+    TIMEZONE = config["TIMEZONE"]
+    new_data = await get_historical_stock_data(ticker, start_date, end_date, resolution)
+    supabase.table("Stock_Historical").delete().match({"stock_ticker": ticker, "resolution": resolution}).execute()
+
+    transformed = []
+    for item in new_data:
+        dt = isoparse(item["datetime"])
+        transformed.append({
+            "stock_ticker": ticker,
+            "resolution": resolution,
+            "open": item["open"],
+            "high": item["high"],
+            "low": item["low"],
+            "close": item["close"],
+            "volume": item["volume"],
+            "timestamp": dt.isoformat(),
+            "created_at": datetime.now(TIMEZONE).isoformat()
+        })
+
+    supabase.table("Stock_Historical").insert(transformed).execute()
+    return new_data
+
 async def stock_historical_service(ticker: str, start_date: str, end_date: str, resolution: str):
+    TIMEZONE = config["TIMEZONE"]
+    STALENESS = config["HISTORICAL_DATA_STALENESS"]
+    HISTORICAL_DATA_TIME_HORIZON = config["HISTORICAL_DATA_TIME_HORIZON"]
+    ALLOWED_HISTORICAL_RESOLUTIONS = config["ALLOWED_HISTORICAL_RESOLUTIONS"]
+
     try:
-        historical_data = await get_historical_stock_data(ticker, start_date, end_date, resolution)
-        return historical_data
+        if resolution not in ALLOWED_HISTORICAL_RESOLUTIONS:
+            raise HTTPException(status_code=400, detail=f"Invalid resolution. Allowed resolutions: {ALLOWED_HISTORICAL_RESOLUTIONS}")
+
+        threshold = STALENESS[resolution]
+        resp = supabase.table("Stock_Historical").select("*").eq("stock_ticker", ticker).eq("resolution", resolution).execute()
+        data = resp.data
+
+        end_date_max = datetime.now().strftime('%Y-%m-%d')
+        start_date_current = (datetime.now() - HISTORICAL_DATA_TIME_HORIZON[resolution]).strftime('%Y-%m-%d')
+
+        if not data:   # no data in exists
+            data = await _fetch_and_store_data(ticker, start_date_current, end_date_max, resolution)
+        else:
+            latest_created = max(d["created_at"] for d in data)
+            if datetime.now(TIMEZONE) - datetime.fromisoformat(latest_created) > threshold:   # data is stale
+                data = await _fetch_and_store_data(ticker, start_date_current, end_date_max, resolution)
+            else:
+                data = [{
+                    "datetime": record["timestamp"],
+                    "open": round(float(record["open"]) ,2),
+                    "high": round(float(record["high"]) ,2),
+                    "low": round(float(record["low"]) ,2),
+                    "close": round(float(record["close"]) ,2),
+                    "volume": int(record["volume"]) if "volume" in record else 0
+                } for record in data]
+
+        requested_start = isoparse(start_date)
+        requested_end = isoparse(end_date)
+
+        filtered_data = []
+        for record in data:
+            record_datetime = isoparse(record["datetime"])
+            if requested_start <= record_datetime <= requested_end:
+                filtered_data.append(record)
+          
+        return filtered_data
     except HTTPException as http_ex:
         raise http_ex
     except Exception as ex:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal Server Error: {str(ex)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {ex}")
     
 
 async def stock_info_service(ticker: str):

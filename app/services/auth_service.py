@@ -132,7 +132,7 @@ async def login_user(email_or_username: str, password: str, ip_address: Optional
         }).execute()
 
         return access_token
-    except APIError as e:
+    except Exception as e:
         raise e
 
 def logout_user(user_id: int) -> None:
@@ -141,5 +141,5 @@ def logout_user(user_id: int) -> None:
     """
     try:
         supabase.table("Sessions").update({"is_active": False}).eq("user_id", user_id).execute()
-    except APIError as e:
+    except Exception as e:
         raise e
