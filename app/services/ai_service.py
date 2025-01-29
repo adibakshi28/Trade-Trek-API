@@ -44,7 +44,6 @@ def ask_ai_service(user_id: int, input_str: str):
 
         if response.status_code == 200:
             result = response.json()
-            print(result)
             return {"reply": result["choices"][0]["message"]["content"].strip()}
         else:
             return {"error": True}
@@ -84,7 +83,6 @@ async def metric_insights_service(user_id: int, metric_config: Dict):
 
         if response.status_code == 200:
             result = response.json()
-            print(result)
             return {"reply": result["choices"][0]["message"]["content"].strip()}
         else:
             return {"error": True}
@@ -123,7 +121,6 @@ async def stock_insights_service(user_id: int, stock_data: Dict):
 
         if response.status_code == 200:
             result = response.json()
-            print(result)
             return {"reply": result["choices"][0]["message"]["content"].strip()}
         else:
             return {"error": True}
