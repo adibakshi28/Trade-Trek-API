@@ -1,6 +1,6 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
-from app.routes import auth, users, stocks, realtime
+from app.routes import auth, users, stocks, ai, realtime
 from app.core.exceptions import register_exception_handlers
 from app.core.startup import register_startup_events
 from app.core.shutdown import register_shutdown_events
@@ -24,6 +24,7 @@ register_shutdown_events(app)
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/user", tags=["Users"])
 app.include_router(stocks.router, prefix="/stock", tags=["Stocks"])
+app.include_router(ai.router, prefix="/ai", tags=["AI"])
 app.include_router(realtime.router, tags=["WebSocket"])
 
 @app.get("/")

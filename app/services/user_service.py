@@ -15,21 +15,21 @@ def user_funds_service(user_id: int):
     try:
         response = supabase.table("Cash").select("user_id", "cash").eq("user_id", user_id).eq("is_active", True).execute()        
         return response.data[0] if response.data else {"user_id": user_id, "cash": 0}
-    except APIError as e:
+    except Exception as e:
         raise e
     
 def user_info_service(user_id: int):
     try:
         response = supabase.table("Users").select("id", "first_name", "last_name", "username", "email").eq("id", user_id).eq("is_active", True).execute()        
         return response.data[0] or {}
-    except APIError as e:
+    except Exception as e:
         raise e
     
 def user_transactions_service(user_id: int):
     try:
         response = supabase.table("Transactions").select("id", "user_id", "stock_ticker", "direction", "quantity", "execution_price", "transaction_fee", "created_at").eq("user_id", user_id).eq("is_active", True).execute()
         return response.data or []
-    except APIError as e:
+    except Exception as e:
         raise e
     
 async def get_user_watchlist_service(user_id: int):
@@ -87,7 +87,7 @@ async def get_user_watchlist_service(user_id: int):
                 item['day_change'] = price_data["ltp"] - price_data["previous_close"]
 
         return watchlist_results
-    except APIError as e:
+    except Exception as e:
         raise e
     
 async def add_to_user_watchlist_service(user_id: int, ticker: str):
@@ -156,7 +156,7 @@ async def add_to_user_watchlist_service(user_id: int, ticker: str):
             "message": f"{ticker} added to your watchlist successfully.",
             "watchlist": current_watchlist
         }
-    except APIError as e:
+    except Exception as e:
         raise e
     
 async def remove_from_user_watchlist_service(user_id: int, ticker: str):
@@ -218,7 +218,7 @@ async def remove_from_user_watchlist_service(user_id: int, ticker: str):
             "watchlist": current_watchlist
         }
 
-    except APIError as e:
+    except Exception as e:
         raise e
     
 async def user_portfolio_service(user_id: int):
@@ -239,7 +239,7 @@ async def user_portfolio_service(user_id: int):
         placeholders = ", ".join(["?"] * len(unique_tickers))
         
         query = f"""
-            SELECT stock_ticker, stock_name 
+            SELECT stock_ticker, stock_name, sector, sub_sector 
             FROM {STOCK_UNIVERSE_CACHE_TABLE}
             WHERE stock_ticker IN ({placeholders});
         """
@@ -247,14 +247,42 @@ async def user_portfolio_service(user_id: int):
         stock_results = await execute_sql(query, params)
 
         stock_name_lookup = {row[0]: row[1] for row in stock_results}
+        stock_sector_lookup = {row[0]: row[2] for row in stock_results}
+        stock_sub_sector_lookup = {row[0]: row[3] for row in stock_results}
 
         for p in portfolio:
+            p["execution_price"] = round(p["execution_price"], 0)
             p["stock_name"] = stock_name_lookup.get(p["stock_ticker"], p["stock_ticker"])
-            p['direction'] = 'SHORT' if p['direction'] == 'SELL' else 'LONG'
+            p["sector"] = stock_sector_lookup.get(p["stock_ticker"], "")
+            p["sub_sector"] = stock_sub_sector_lookup.get(p["stock_ticker"], "")
+            if p["direction"] == "SELL" or p['direction'] == 'BUY':
+                p['direction'] = 'SHORT' if p['direction'] == 'SELL' else 'LONG'
+        
+        for p in portfolio:
+            p["value"] = round(p["quantity"] * p["execution_price"], 2)
+        
+        total_portfolio_value = sum(p["value"] for p in portfolio)
+        
+        if total_portfolio_value > 0:
+            for p in portfolio:
+                p["stock_percentage"] = round((p["value"] / total_portfolio_value) * 100, 2)
+            
+            sector_totals = {}
+            for p in portfolio:
+                sector = p["sector"]
+                sector_totals[sector] = sector_totals.get(sector, 0) + p["value"]
+            
+            sector_percentages = {
+                sector: (value / total_portfolio_value) * 100 
+                for sector, value in sector_totals.items()
+            }
+            
+            for p in portfolio:
+                p["sector_percentage"] = round(sector_percentages.get(p["sector"], 0), 2)
         
         return portfolio
 
-    except APIError as e:
+    except Exception as e:
         raise e
     
 
@@ -287,7 +315,7 @@ def user_portfolio_history_service(user_id: int):
         }
 
         return response
-    except APIError as e:
+    except Exception as e:
         raise e
 
 async def user_trade_summary_service(user_id: int):
@@ -424,3 +452,893 @@ async def user_trade_summary_service(user_id: int):
         raise e
     except Exception as ex:
         raise ex
+    
+
+
+def _create_notification_utility(insert_data):
+    try:
+        supabase.table("Notifications").insert(insert_data).execute()
+        return True
+    except Exception as e:
+        return False
+
+
+def notification_service(user_id: int):
+    try:
+        response = supabase.table("Notifications").select("id", "description", "type", "read", "created_at").eq("user_id", user_id).eq("is_active", True).execute()        
+        result =  response.data if response.data else []
+    
+        unread_count = len([item for item in result if item['read'] == False])
+        return {"notifications": result, "unread_count": unread_count}
+    except Exception as e:
+        raise e
+    
+
+def mark_notification_read_service(user_id: int, notification_id: int):
+    try:
+        supabase.table("Notifications").update({"read": True}).eq("user_id", user_id).eq("id", notification_id).eq("is_active", True).execute()
+        result = notification_service(user_id)
+
+        return result
+    except Exception as e:
+        raise e
+
+
+def get_user_friends_service(user_id: int):
+    try:
+        friends = set()
+        response = supabase.table("Friends").select("user_1").eq("user_2", user_id).eq("is_active", True).execute()
+        if response.data:
+            friends.update(item["user_1"] for item in response.data)
+        response = supabase.table("Friends").select("user_2").eq("user_1", user_id).eq("is_active", True).execute()
+        if response.data:
+            friends.update(item["user_2"] for item in response.data)
+        if not friends:
+            return []
+        response = supabase.table("Users").select("id", "username, email, first_name, last_name").in_("id", list(friends)).eq("is_active", True).execute()
+        return response.data or []
+
+    except Exception as e:
+        raise e
+    
+
+# TODO: Check if user has already sent a friend request to the recipient
+def user_friend_search_to_add_service(user_id: int, user_name_str: str):
+    try:
+        user_response = supabase.table("Users").select(
+            "id, username, email, first_name, last_name"
+        ).ilike("username", f"%{user_name_str}%").eq("is_active", True).execute()
+        
+        if not user_response.data:
+            return []
+
+        friends = set()
+        
+        friends_response_1 = supabase.table("Friends").select("user_1").eq("user_2", user_id).eq("is_active", True).execute()
+        if friends_response_1.data:
+            friends.update(item["user_1"] for item in friends_response_1.data)
+        
+        friends_response_2 = supabase.table("Friends").select("user_2").eq("user_1", user_id).eq("is_active", True).execute()
+        if friends_response_2.data:
+            friends.update(item["user_2"] for item in friends_response_2.data)
+        
+        potential_friends = [
+            item for item in user_response.data if item["id"] not in friends
+        ]
+
+        return potential_friends[:5]
+    
+    except Exception as e:
+        raise e
+
+
+    
+def send_friend_request_service(user_id: int, request_to_username: str):
+    try:
+        # Fetch the recipient's user ID
+        recipient_response = supabase.table("Users") \
+            .select("id") \
+            .eq("username", request_to_username) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not recipient_response.data:
+            return {"success": False, "message": "Recipient user not found."}
+        
+        request_to_user_id = recipient_response.data[0]["id"]
+
+        # Fetch the sender's username
+        sender_response = supabase.table("Users") \
+            .select("username") \
+            .eq("id", user_id) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not sender_response.data:
+            return {"success": False, "message": "Sender user not found."}
+        
+        sent_by_username = sender_response.data[0]["username"]
+
+        # Function to check existing records
+        def record_exists(table, conditions):
+            query = supabase.table(table).select("id").eq("is_active", True)
+            for field, value in conditions.items():
+                query = query.eq(field, value)
+            result = query.execute()
+            return bool(result.data)
+
+        # Check if users are already friends
+        is_friends = (
+            record_exists("Friends", {"user_1": user_id, "user_2": request_to_user_id}) or
+            record_exists("Friends", {"user_1": request_to_user_id, "user_2": user_id})
+        )
+        
+        if is_friends:
+            return {"success": False, "message": "You are already friends."}
+
+        # Check if a friend request already exists
+        request_exists = (
+            record_exists("Friend_Requests", {"sent_by_id": user_id, "received_by_id": request_to_user_id}) or
+            record_exists("Friend_Requests", {"sent_by_id": request_to_user_id, "received_by_id": user_id})
+        )
+        
+        if request_exists:
+            return {"success": False, "message": "A friend request already exists."}
+
+        # Create a new friend request
+        supabase.table("Friend_Requests").insert({
+            "sent_by_id": user_id,
+            "received_by_id": request_to_user_id,
+            "status": "PENDING",
+            "is_active": True
+        }).execute()
+
+        # Prepare notification data
+        notification_data = {
+            "user_id": request_to_user_id,
+            "description": f"{sent_by_username} sent you a friend request.",
+            "type": "FRIEND_REQUEST",
+            "read": False,
+            "is_active": True
+        }
+
+        # Send notification
+        if not _create_notification_utility(notification_data):
+            return {"success": False, "message": "Failed to send notification."}
+
+        return {"success": True, "message": f"Friend request sent to {request_to_username} successfully."}
+    
+    except Exception as e:
+        return {"success": False, "message": "An error occurred while processing your request."}
+
+    
+def accept_friend_request_service(user_id: int, accepted_username: str):
+    try:
+        # Helper function to check if a record exists based on conditions
+        def record_exists(table, conditions):
+            query = supabase.table(table).select("id").eq("is_active", True)
+            for field, value in conditions.items():
+                query = query.eq(field, value)
+            result = query.execute()
+            return bool(result.data)
+
+        # Fetch the user ID of the accepted_username
+        recipient_response = supabase.table("Users") \
+            .select("id") \
+            .eq("username", accepted_username) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not recipient_response.data:
+            return {"success": False, "message": "User not found."}
+        
+        accepted_user_id = recipient_response.data[0]["id"]
+
+        # Fetch the username of the user_id (sender)
+        sender_response = supabase.table("Users") \
+            .select("username") \
+            .eq("id", user_id) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not sender_response.data:
+            return {"success": False, "message": "Sender not found."}
+        
+        sender_username = sender_response.data[0]["username"]
+
+        # **Check if the friend request exists**
+        # The friend request should be from accepted_user_id to user_id
+        friend_request_exists = record_exists("Friend_Requests", {
+            "sent_by_id": accepted_user_id,
+            "received_by_id": user_id,
+            "status": "PENDING"
+        })
+        
+        if not friend_request_exists:
+            return {"success": False, "message": "Friend request does not exist."}
+
+        # Check if the friendship already exists
+        is_already_friends = (
+            record_exists("Friends", {"user_1": user_id, "user_2": accepted_user_id}) or
+            record_exists("Friends", {"user_1": accepted_user_id, "user_2": user_id})
+        )
+        
+        if is_already_friends:
+            return {"success": False, "message": "Friendship already exists."}
+
+        # Create Friendship
+        supabase.table("Friends").insert({
+            "user_1": user_id,
+            "user_2": accepted_user_id,
+            "is_active": True
+        }).execute()
+
+        # Update Friend Request Status to ACCEPTED
+        supabase.table("Friend_Requests").update({
+            "status": "ACCEPTED",
+            "is_active": False
+        }).eq("sent_by_id", accepted_user_id) \
+          .eq("received_by_id", user_id) \
+          .eq("status", "PENDING") \
+          .execute()
+
+        # Send Notification to the Accepted User
+        notification_data = {  
+            "user_id": accepted_user_id,
+            "description": f"{sender_username} accepted your friend request.",
+            "type": "FRIEND_ACCEPTED",
+            "read": False,
+            "is_active": True
+        }
+        
+        if not _create_notification_utility(notification_data):
+            return {"success": False, "message": "Failed to send notification."}
+
+        # Mark the Original Notification as Read and Inactive
+        supabase.table("Notifications").update({
+            "read": True, "is_active": False
+        }).eq("user_id", user_id) \
+          .eq("description", f"{accepted_username} sent you a friend request.") \
+          .execute()
+
+        return {"success": True, "message": f"Friend request from {accepted_username} accepted successfully."}
+    
+    except Exception as e:
+        print(f"APIError: {e}")
+        return {"success": False, "message": "An error occurred while processing your request."}
+    
+
+def decline_friend_request_service(user_id: int, declined_username: str):
+    try:
+        # Helper function to check if a record exists based on conditions
+        def record_exists(table, conditions):
+            query = supabase.table(table).select("id").eq("is_active", True)
+            for field, value in conditions.items():
+                query = query.eq(field, value)
+            result = query.execute()
+            return bool(result.data)
+
+        # Fetch the user ID of the declined_username
+        recipient_response = supabase.table("Users") \
+            .select("id") \
+            .eq("username", declined_username) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not recipient_response.data:
+            return {"success": False, "message": "User not found."}
+        
+        declined_user_id = recipient_response.data[0]["id"]
+
+        # Fetch the username of the user_id (declining user)
+        sender_response = supabase.table("Users") \
+            .select("username") \
+            .eq("id", user_id) \
+            .eq("is_active", True) \
+            .execute()
+        
+        if not sender_response.data:
+            return {"success": False, "message": "Sender not found."}
+        
+        sender_username = sender_response.data[0]["username"]
+
+        # Check if the friend request exists
+        # The friend request should be from declined_user_id to user_id
+        friend_request_exists = record_exists("Friend_Requests", {
+            "sent_by_id": declined_user_id,
+            "received_by_id": user_id,
+            "status": "PENDING"
+        })
+        
+        if not friend_request_exists:
+            return {"success": False, "message": "Friend request does not exist."}
+
+        # Check if the friendship already exists
+        is_already_friends = (
+            record_exists("Friends", {"user_1": user_id, "user_2": declined_user_id}) or
+            record_exists("Friends", {"user_1": declined_user_id, "user_2": user_id})
+        )
+        
+        if is_already_friends:
+            return {"success": False, "message": "Friendship already exists."}
+
+        # Update Friend Request Status to DECLINED
+        update_response = supabase.table("Friend_Requests").update({
+            "status": "DECLINED",
+            "is_active": False
+        }).eq("sent_by_id", declined_user_id) \
+          .eq("received_by_id", user_id) \
+          .eq("status", "PENDING") \
+          .execute()
+        
+        if not update_response.data:
+            return {"success": False, "message": "Failed to update friend request status."}
+
+        # Send Notification to the Declined User
+        notification_data = {
+            "user_id": declined_user_id,
+            "description": f"{sender_username} declined your friend request.",
+            "type": "FRIEND_DECLINED",
+            "read": False,
+            "is_active": True
+        }
+        
+        if not _create_notification_utility(notification_data):
+            return {"success": False, "message": "Failed to send notification."}
+
+        # Mark the Original Notification as Read and Inactive
+        supabase.table("Notifications").update({
+            "read": True, "is_active": False
+        }).eq("user_id", user_id) \
+          .eq("description", f"{declined_username} sent you a friend request.") \
+          .execute()
+
+        return {"success": True, "message": f"Friend request from {declined_username} declined successfully."}
+    
+    except Exception as e:
+        print(f"APIError: {e}")
+        return {"success": False, "message": "An error occurred while processing your request."}
+    
+
+def get_all_groups_for_user_service(user_id: int):
+    try:
+        response = supabase.table("Group_Members") \
+            .select("group_id, Groups(group_name, description)") \
+            .eq("user_id", user_id) \
+            .eq("is_active", True) \
+            .eq("Groups.is_active", True) \
+            .execute()
+
+        return [{
+            "group_id": item["group_id"],
+            "group_name": item["Groups"]["group_name"],
+            "description": item["Groups"]["description"]
+        } for item in response.data if item.get("Groups")]
+
+    except Exception as e:
+        raise e
+
+
+def create_group_service(user_id: int, group_name: str, group_description: Optional[str]):
+    try:
+        # Check if the group_name already exists
+        group = supabase.table("Groups").select("id").eq("group_name", group_name).eq("is_active", True).execute()
+        if group.data:
+            return {"success": False, "message": "Group name already exists. Chose a different name."}
+        
+        supabase.table("Groups").insert({"leader_id": user_id, "group_name": group_name, "description": group_description, "is_active": True}).execute()
+        
+        # Add the leader as a member of the group
+        group = supabase.table("Groups").select("id").eq("group_name", group_name).eq("is_active", True).execute()
+        group_id = group.data[0]["id"]
+        supabase.table("Group_Members").insert({"group_id": group_id, "user_id": user_id, "is_active": True}).execute()
+
+
+        return {"success": True, "message": f"Group {group_name} created successfully."}
+    except Exception as e:
+        raise e
+
+
+def group_info_service(user_id: int, group_name: str):
+    try:
+        group_res = supabase.table("Groups").select(
+            "id, leader_id, description, Users!leader_id(username)"
+        ).ilike("group_name", group_name).eq("is_active", True).execute()
+
+        if not group_res.data:
+            return {"success": False, "message": "Group not found or inactive"}
+
+        group_data = group_res.data[0]
+        group_id = group_data["id"]
+
+        # Get all active members in one query
+        members_res = supabase.table("Group_Members").select(
+            "user_id, Users!user_id(username)"
+        ).eq("group_id", group_id).eq("is_active", True).execute()
+
+        return {
+            "success": True,
+            "group_name": group_name,
+            "description": group_data.get("description", ""),
+            "leader": group_data["Users"].get("username", "Unknown"),
+            "members": [m["Users"]["username"] for m in members_res.data if m.get("Users")]
+        }
+
+    except Exception as e:
+        return {"success": False, "message": "Failed to fetch group info"}
+    
+# TODO: Check if user is already invited to the group
+# TODO: Check if the user searching is the member of the group 
+def user_group_search_to_add_service (user_id: int, user_name_str: str, group_name_str: str):
+
+    try:
+        # Fetch user_ids of users with usernames matching user_name_str
+        user_ids_res = supabase.table("Users").select("id").ilike("username", f"%{user_name_str}%").eq("is_active", True).execute()
+        user_ids = [item["id"] for item in user_ids_res.data]
+
+        if not user_ids:
+            return []
+
+        # Fetch user_ids of users who are already members of the group
+        group_res = supabase.table("Groups").select("id").ilike("group_name", f"%{group_name_str}%").eq("is_active", True).execute()
+        group_id = group_res.data[0]["id"]
+        group_members_res = supabase.table("Group_Members").select("user_id").eq("group_id", group_id).eq("is_active", True).execute()
+        group_members = [item["user_id"] for item in group_members_res.data]
+
+        # Filter out users who are already members of the group
+        users_to_add = [user_id for user_id in user_ids if user_id not in group_members]
+
+        # Fetch user details of users to add
+        users_res = supabase.table("Users").select("id", "username, email, first_name, last_name").in_("id", users_to_add).eq("is_active", True).execute()
+        return users_res.data[:5] or []
+
+    except Exception as e:
+        return []
+    
+
+# TODO: Check if user is already invited to the group
+def user_group_search_to_join_service(user_id: int, group_name_str: str):
+    try:
+        # Fetch all active groups matching the search term
+        groups_response = supabase.table("Groups").select("id", "group_name").ilike("group_name", f"%{group_name_str}%").eq("is_active", True).execute()
+        if not groups_response.data:
+            return []
+        
+        group_ids = [group["id"] for group in groups_response.data]
+        
+        # Check existing memberships in these groups
+        memberships_response = supabase.table("Group_Members").select("group_id").eq("user_id", user_id).eq("is_active", True).in_("group_id", group_ids).execute()
+        existing_group_ids = {member["group_id"] for member in memberships_response.data}
+        
+        # Filter out groups where user is already a member
+        available_groups = [group for group in groups_response.data if group["id"] not in existing_group_ids]
+        
+        # Return up to 5 groups
+        return available_groups[:5]
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return []
+
+
+def request_to_join_group_service(user_id: int, username: str, group_name: str):
+    try:
+        # Fetch group_id of the group_name
+        group = supabase.table("Groups").select("id, leader_id").eq("group_name", group_name).eq("is_active", True).execute()
+        if not group.data:
+            return {"success": False, "message": "Group not found or inactive."}
+
+        group_id = group.data[0]["id"]
+        leader_id = group.data[0]["leader_id"]
+
+        # Check if the user is already a member of the group
+        existing_member = supabase.table("Group_Members").select("id").eq("group_id", group_id).eq("user_id", user_id).eq("is_active", True).execute()
+        if existing_member.data:
+            return {"success": False, "message": "You are already a member of the group."}
+
+        # Check if the user has already been invited to the group
+        existing_invite = supabase.table("Group_Requests").select("id").eq("group_id", group_id).eq("user_id", user_id).eq("is_active", True).execute()
+        if existing_invite.data:
+            return {"success": False, "message": "You have already been invited to the group."}
+
+        # Create group request
+        supabase.table("Group_Requests").insert({
+            "group_id": group_id,
+            "user_id": user_id,
+            "status": "PENDING",
+            "is_active": True
+        }).execute()
+
+        # Send notification to the group leader
+        notification_data = {
+            "user_id": leader_id,
+            "description": f"{group_name} has a new join request from {username}",
+            "type": "GROUP_JOIN_REQUEST",
+            "read": False,
+            "is_active": True
+        }
+        if not _create_notification_utility(notification_data):
+            return {"success": False, "message": "Failed to send notification."}
+
+        return {"success": True, "message": "Join request sent successfully."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+    
+
+def accept_group_join_request_service(user_id: int, group_name: str, user_name_joining: str):
+    try:
+        # Fetch group_id and leader_id of the group_name
+        group = supabase.table("Groups").select("id, leader_id").eq("group_name", group_name).eq("is_active", True).execute()
+        if not group.data:
+            return {"success": False, "message": "Group not found or inactive."}
+        
+        group_id = group.data[0]["id"]
+        leader_id = group.data[0]["leader_id"]
+
+        # Fetch user_id of the user_name_joining
+        user = supabase.table("Users").select("id").eq("username", user_name_joining).eq("is_active", True).execute()
+        if not user.data:
+            return {"success": False, "message": "User not found or inactive."}
+        
+        user_id_joining = user.data[0]["id"]
+
+        # Check if the user is already a member of the group
+        existing_member = supabase.table("Group_Members").select("id").eq("group_id", group_id).eq("user_id", user_id_joining).eq("is_active", True).execute()
+        if existing_member.data:
+            return {"success": False, "message": "User is already a member of the group."}
+
+        # Check if the user has been invited to the group
+        invite = supabase.table("Group_Requests").select("id").eq("group_id", group_id).eq("user_id", user_id_joining).eq("status", "PENDING").eq("is_active", True).execute()
+        if not invite.data:
+            return {"success": False, "message": "No pending join request to the group found."}
+        
+        invite_id = invite.data[0]["id"]
+
+        # Create group membership record
+        supabase.table("Group_Members").insert({
+            "group_id": group_id,
+            "user_id": user_id_joining,
+            "is_active": True
+        }).execute()
+
+        # Update group request status to ACCEPTED
+        supabase.table("Group_Requests").update({
+            "status": "ACCEPTED",
+            "is_active": False
+        }).eq("id", invite_id).execute()
+
+        # Send notification to the user joining
+        notification_data = {
+            "user_id": user_id_joining,
+            "description": f"Your join request to the group '{group_name}' has been accepted.",
+            "type": "GROUP_JOIN_ACCEPTED",
+            "read": False,
+            "is_active": True
+        }
+        if not _create_notification_utility(notification_data):
+            return {"success": False, "message": "Failed to send notification."}
+        
+        # Mark the notification of the group join request as read and inactive
+        supabase.table("Notifications").update({
+            "read": True,
+            "is_active": False
+        }).eq("user_id", leader_id).eq("description", f"{group_name} has a new join request from {user_name_joining}").execute()
+                
+        return {"success": True, "message": f"Group join request accepted from {user_name_joining}."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+    
+
+def decline_group_join_request_service(user_id: int, group_name: str, user_name_joining: str):
+    try:
+        # Fetch group_id and leader_id of the group_name
+        group = supabase.table("Groups").select("id, leader_id").eq("group_name", group_name).eq("is_active", True).execute()
+        if not group.data:
+            return {"success": False, "message": "Group not found or inactive."}
+        
+        group_id = group.data[0]["id"]
+        leader_id = group.data[0]["leader_id"]
+
+        # Fetch user_id of the user_name_joining
+        user = supabase.table("Users").select("id").eq("username", user_name_joining).eq("is_active", True).execute()
+        if not user.data:
+            return {"success": False, "message": "User not found or inactive."}
+        
+        user_id_joining = user.data[0]["id"]
+
+        # Check if the user is already a member of the group
+        existing_member = supabase.table("Group_Members").select("id").eq("group_id", group_id).eq("user_id", user_id_joining).eq("is_active", True).execute()
+        if existing_member.data:
+            return {"success": False, "message": "User is already a member of the group."}
+
+        # Check if the user has been invited to the group
+        invite = supabase.table("Group_Requests").select("id").eq("group_id", group_id).eq("user_id", user_id_joining).eq("status", "PENDING").eq("is_active", True).execute()
+        if not invite.data:
+            return {"success": False, "message": "No pending join request to the group found."}
+        
+        invite_id = invite.data[0]["id"]
+
+        # Update group request status to DECLINED
+        supabase.table("Group_Requests").update({
+            "status": "DECLINED",
+            "is_active": False
+        }).eq("id", invite_id).execute()
+
+        # Send notification to the user joining
+        notification_data = {
+            "user_id": user_id_joining,
+            "description": f"Your join request to the group '{group_name}' has been declined.",
+            "type": "GROUP_JOIN_DECLINED",
+            "read": False,
+            "is_active": True
+        }
+        if not _create_notification_utility(notification_data):
+            return {"success": False, "message": "Failed to send notification."}
+        
+        # Mark the notification of the group join request as read and inactive
+        supabase.table("Notifications").update({
+            "read": True,
+            "is_active": False
+        }).eq("user_id", leader_id).eq("description", f"{group_name} has a new join request from {user_name_joining}").execute()
+        
+        return {"success": True, "message": f"Group join request declined from {user_name_joining}."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+    
+
+def send_group_invite_service(user_id: int, request_to_username: str, group_name: str):
+    try:
+        # Fetch user_id of the request_to_username
+        recipient = supabase.table("Users").select("id").eq("username", request_to_username).eq("is_active", True).execute()
+        if not recipient.data:
+            return {"success": False, "message": "Recipient user not found."}
+        request_to_user_id = recipient.data[0]["id"]
+
+        # Fetch group_id of the group_name
+        group = supabase.table("Groups").select("id").eq("group_name", group_name).eq("is_active", True).execute()
+        if not group.data:
+            return {"success": False, "message": "Group not found or inactive."}
+        group_id = group.data[0]["id"]
+
+        # Check if the user is already a member of the group
+        existing_member = supabase.table("Group_Members").select("id").eq("group_id", group_id).eq("user_id", request_to_user_id).eq("is_active", True).execute()
+        if existing_member.data:
+            return {"success": False, "message": "User is already a member of the group."}
+
+        # Check if the user has already been invited to the group
+        existing_invite = supabase.table("Group_Requests").select("id").eq("group_id", group_id).eq("user_id", request_to_user_id).eq("is_active", True).execute()
+        if existing_invite.data:
+            return {"success": False, "message": "User has already been invited to the group."}
+
+        # Create group request
+        supabase.table("Group_Requests").insert({
+            "group_id": group_id,
+            "user_id": request_to_user_id,
+            "status": "PENDING",
+            "is_active": True
+        }).execute()
+
+        # Send notification to the recipient
+        notification_data = {
+            "user_id": request_to_user_id,
+            "description": f"You have been invited to join the group '{group_name}'.",
+            "type": "GROUP_INVITE",
+            "read": False,
+            "is_active": True
+        }
+        if not _create_notification_utility(notification_data):
+            return {"success": False, "message": "Failed to send notification."}
+
+        return {"success": True, "message": f"Group invite sent to {request_to_username} successfully."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+    
+def accept_group_invite_service(user_id: int, username: str, group_name: str):
+    try:
+        # Fetch group_id and leader_id of the group_name
+        group = supabase.table("Groups").select("id, leader_id").eq("group_name", group_name).eq("is_active", True).execute()
+        if not group.data:
+            return {"success": False, "message": "Group not found or inactive."}
+        group_id = group.data[0]["id"]
+        leader_id = group.data[0]["leader_id"]
+
+        # Check if the user is already a member of the group
+        existing_member = supabase.table("Group_Members").select("id").eq("group_id", group_id).eq("user_id", user_id).eq("is_active", True).execute()
+        if existing_member.data:
+            return {"success": False, "message": "You are already a member of the group."}
+
+        # Check if the user has been invited to the group
+        invite = supabase.table("Group_Requests").select("id").eq("group_id", group_id).eq("user_id", user_id).eq("status", "PENDING").eq("is_active", True).execute()
+        if not invite.data:
+            return {"success": False, "message": "No pending invite to the group found."}
+        invite_id = invite.data[0]["id"]
+
+        # Create group membership record
+        supabase.table("Group_Members").insert({
+            "group_id": group_id,
+            "user_id": user_id,
+            "is_active": True
+        }).execute()
+
+        # Update group request status to ACCEPTED
+        supabase.table("Group_Requests").update({
+            "status": "ACCEPTED",
+            "is_active": False
+        }).eq("id", invite_id).execute()
+
+        # Send notification to the group leader
+        notification_data = {
+            "user_id": leader_id,
+            "description": f"{username} has accepted the invite to join the group '{group_name}'.",
+            "type": "GROUP_ACCEPTED",
+            "read": False,
+            "is_active": True
+        }
+        if not _create_notification_utility(notification_data):
+            return {"success": False, "message": "Failed to send notification."}
+
+        # Mark the notification of the group invite as read and inactive
+        supabase.table("Notifications").update({
+            "read": True, "is_active": False
+        }).eq("user_id", user_id).eq("description", f"You have been invited to join the group '{group_name}'.").execute()
+
+        return {"success": True, "message": f"Successfully joined the group '{group_name}'."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+def decline_group_invite_service(user_id: int, username: str, group_name: str):
+    try:
+        # Fetch group_id and leader_id of the group_name
+        group = supabase.table("Groups").select("id, leader_id").eq("group_name", group_name).eq("is_active", True).execute()
+        if not group.data:
+            return {"success": False, "message": "Group not found or inactive."}
+        group_id = group.data[0]["id"]
+        leader_id = group.data[0]["leader_id"]
+
+        # Check if the user is already a member of the group
+        existing_member = supabase.table("Group_Members").select("id").eq("group_id", group_id).eq("user_id", user_id).eq("is_active", True).execute()
+        if existing_member.data:
+            return {"success": False, "message": "You are already a member of the group."}
+
+        # Check if the user has been invited to the group
+        invite = supabase.table("Group_Requests").select("id").eq("group_id", group_id).eq("user_id", user_id).eq("status", "PENDING").eq("is_active", True).execute()
+        if not invite.data:
+            return {"success": False, "message": "No pending invite to the group found."}
+        invite_id = invite.data[0]["id"]
+
+        # Update group request status to DECLINED
+        supabase.table("Group_Requests").update({
+            "status": "DECLINED",
+            "is_active": False
+        }).eq("id", invite_id).execute()
+
+        # Send notification to the group leader
+        notification_data = {
+            "user_id": leader_id,
+            "description": f"{username} has declined the invite to join the group '{group_name}'.",
+            "type": "GROUP_DECLINED",
+            "read": False,
+            "is_active": True
+        }
+        if not _create_notification_utility(notification_data):
+            return {"success": False, "message": "Failed to send notification."}
+
+        # Mark the notification of the group invite as read and inactive
+        supabase.table("Notifications").update({
+            "read": True, "is_active": False
+        }).eq("user_id", user_id).eq("description", f"You have been invited to join the group '{group_name}'.").execute()
+
+        return {"success": True, "message": f"Invite to join the group '{group_name}' declined successfully."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+    
+
+def group_leaderboard_service(user_id: int, group_name: str):
+    try:
+        # Case-insensitive group search
+        group = supabase.table("Groups").select(
+            "id, leader_id, group_name, description"
+        ).ilike("group_name", group_name).eq("is_active", True).execute()
+
+        if not group.data:
+            return {"success": False, "message": "Group not found or inactive"}
+
+        group_data = group.data[0]
+        group_id = group_data["id"]
+        leader_id = group_data["leader_id"]
+
+        # Single query for leader and members
+        members_response = supabase.table("Group_Members").select(
+            "user_id, Users(username)"
+        ).eq("group_id", group_id).eq("is_active", True).execute()
+
+        member_ids = [m["user_id"] for m in members_response.data]
+        leader_data = next((m for m in members_response.data if m["user_id"] == leader_id), None)
+
+        # Single query for all portfolios
+        portfolio_response = supabase.table("Portfolio_History").select(
+            "user_id, holding_value, unrealised_pnl, cash, timestamp"
+        ).in_("user_id", member_ids).eq("is_active", True).order("timestamp", desc=True).execute()
+
+        # Process portfolio data
+        portfolio_map = {}
+        for entry in portfolio_response.data:
+            if entry["user_id"] not in portfolio_map:
+                portfolio_map[entry["user_id"]] = {
+                    "holding_value": entry["holding_value"],
+                    "unrealised_pnl": entry["unrealised_pnl"],
+                    "cash": entry["cash"],
+                    "timestamp": entry["timestamp"]
+                }
+
+        # Build member data
+        member_data = []
+        for member in members_response.data:
+            portfolio = portfolio_map.get(member["user_id"])
+            member_data.append({
+                "username": member["Users"]["username"],
+                "portfolio": portfolio
+            })
+
+        return {
+            "success": True,
+            "group_name": group_data["group_name"],
+            "description": group_data["description"],
+            "leader": leader_data["Users"]["username"] if leader_data else "Unknown",
+            "members": member_data
+        }
+
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+    
+async def friend_summary_service(user_id: int, friend_username: str):
+    try:
+        # Fetch user_id of the friend_username
+        friend = supabase.table("Users").select("id").eq("username", friend_username).eq("is_active", True).execute()
+        if not friend.data:
+            return {"success": False, "message": "Friend user not found."}
+        friend_to_user_id = friend.data[0]["id"]
+
+
+        # Fetch the friend's transactions
+        transactions = supabase.table("Transactions").select(
+            "id", "stock_ticker", "direction", "quantity", "execution_price", "transaction_fee", "created_at"
+        ).eq("user_id", friend_to_user_id).eq("is_active", True).execute()
+        txs = transactions.data if transactions and transactions.data else []
+
+        # Fetch the friend's portfolio history
+        portfolio = supabase.table("Portfolio_History").select(
+            "holding_value", "unrealised_pnl", "cash", "timestamp"
+        ).eq("user_id", friend_to_user_id).eq("is_active", True).order("timestamp", desc=True).limit(1).execute()
+        portfolio_record = None
+        if portfolio.data:
+            portfolio_record = {
+                "holding_value": portfolio.data[0]["holding_value"],
+                "unrealised_pnl": portfolio.data[0]["unrealised_pnl"],
+                "cash": portfolio.data[0]["cash"],
+                "timestamp": portfolio.data[0]["timestamp"]
+            }
+
+        # Calculate the total portfolio value for the friend
+        total_portfolio_value = 0.0
+        if portfolio_record:
+            total_portfolio_value = portfolio_record["holding_value"] + portfolio_record["cash"]
+        
+        # Call the user_trade_summary_service to get the trade summary for the friend
+        trade_summary = await user_trade_summary_service(friend_to_user_id)
+
+        return {
+            "success": True,
+            "friend_username": friend_username,
+            "portfolio": portfolio_record,
+            "transactions": txs,
+            "current_cash": portfolio_record["cash"],
+            "total_portfolio_value": total_portfolio_value,
+            "total_unrealised_pnl": portfolio_record["unrealised_pnl"],
+            "trade_summary": trade_summary
+        }
+
+    except Exception as e:
+        raise e

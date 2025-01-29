@@ -23,6 +23,7 @@ async def get_historical_stock_data(symbol: str, start_date: str, end_date: str,
         end_date (str): End date in 'YYYY-MM-DD' format.
         resolution (str): Time interval resolution. Valid options are '1min', '5min', '15min', '30min', '45min', '1h', '2h', '4h', '1day', '1week', '1month'.
     """
+    print(f"Fetching historical stock data for {symbol} from Twelve Data API...")
     try:
         if resolution not in ["1min", "5min", "15min", "30min", "45min", "1h", "2h", "4h", "1day", "1week", "1month"]:
             raise ValueError("Invalid resolution in passed to Twelve Data API")

@@ -23,6 +23,7 @@ def validate_env_variables():
         "SUPABASE_URL",
         "SUPABASE_SERVICE_KEY",
         "TWELVE_DATA_API_KEY",
+        "DEEPSEEK_API_KEY"
     ]
 
     missing_vars = [var for var in required_env_vars if not os.getenv(var)]
