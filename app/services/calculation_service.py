@@ -2,7 +2,7 @@ import math
 import datetime
 import numpy as np
 import pandas as pd
-import cvxpy as cp
+# import cvxpy as cp
 from typing import List, Dict, Any
 from postgrest import APIError
 
@@ -369,138 +369,134 @@ def calculate_distribution_metrics(portfolio: List[Dict[str, Any]]) -> Dict[str,
         "hhi": hhi_value,
     }
 
-import numpy as np
-import pandas as pd
-import cvxpy as cp
+# def portfolio_optimization(
+#     returns_df: pd.DataFrame,
+#     config_section: dict
+# ) -> dict:
+#     """
+#     Performs basic portfolio optimization with the following goals:
+#       - "min_variance": minimize w^T Sigma w
+#       - "maximize_return": maximize w^T mu
 
-def portfolio_optimization(
-    returns_df: pd.DataFrame,
-    config_section: dict
-) -> dict:
-    """
-    Performs basic portfolio optimization with the following goals:
-      - "min_variance": minimize w^T Sigma w
-      - "maximize_return": maximize w^T mu
+#     SUBJECT TO:
+#       - sum(w) = 1
+#       - w_i in [min_allocation, max_allocation]
+#       - optional target_volatility (annual)
+#       - optional min_return_constraint (annual)
+#       - optional transaction costs (simply reduce mu)
 
-    SUBJECT TO:
-      - sum(w) = 1
-      - w_i in [min_allocation, max_allocation]
-      - optional target_volatility (annual)
-      - optional min_return_constraint (annual)
-      - optional transaction costs (simply reduce mu)
+#     :param returns_df: DataFrame of historical returns, shape (time, tickers)
+#     :param config_section: config dict with fields like:
+#       {
+#         "goal": "min_variance" or "maximize_return",
+#         "constraints": {
+#           "min_allocation": 0.05,
+#           "max_allocation": 0.50
+#         },
+#         "target_volatility": 0.2,
+#         "min_return_constraint": 0.1,
+#         "include_transaction_costs": true,
+#         "transaction_costs": 0.01,
+#         "rebalance_frequency": "monthly",
+#         "risk_free_rate": 0.03
+#       }
+#     :return: dict with keys:
+#       - "optimal_allocation": {ticker: weight, ...}
+#       - "objective_value": float (variance or return, depending on goal)
+#       - "goal": str (the selected optimization goal)
+#       - "rebalance_frequency": str
+#       - "note_on_transaction_costs": str
+#     """
+#     if returns_df.empty:
+#         raise ValueError("No historical returns data provided for optimization.")
 
-    :param returns_df: DataFrame of historical returns, shape (time, tickers)
-    :param config_section: config dict with fields like:
-      {
-        "goal": "min_variance" or "maximize_return",
-        "constraints": {
-          "min_allocation": 0.05,
-          "max_allocation": 0.50
-        },
-        "target_volatility": 0.2,
-        "min_return_constraint": 0.1,
-        "include_transaction_costs": true,
-        "transaction_costs": 0.01,
-        "rebalance_frequency": "monthly",
-        "risk_free_rate": 0.03
-      }
-    :return: dict with keys:
-      - "optimal_allocation": {ticker: weight, ...}
-      - "objective_value": float (variance or return, depending on goal)
-      - "goal": str (the selected optimization goal)
-      - "rebalance_frequency": str
-      - "note_on_transaction_costs": str
-    """
-    if returns_df.empty:
-        raise ValueError("No historical returns data provided for optimization.")
+#     # 1) Clean the data: drop columns with all NaNs or zero variance
+#     returns_df = returns_df.dropna(axis=1, how="all")
+#     zero_var_cols = [c for c in returns_df.columns if returns_df[c].std() == 0]
+#     returns_df = returns_df.drop(columns=zero_var_cols, errors="ignore")
+#     if returns_df.empty:
+#         raise ValueError("After dropping empty/zero-variance assets, no data left for optimization.")
 
-    # 1) Clean the data: drop columns with all NaNs or zero variance
-    returns_df = returns_df.dropna(axis=1, how="all")
-    zero_var_cols = [c for c in returns_df.columns if returns_df[c].std() == 0]
-    returns_df = returns_df.drop(columns=zero_var_cols, errors="ignore")
-    if returns_df.empty:
-        raise ValueError("After dropping empty/zero-variance assets, no data left for optimization.")
+#     # 2) Compute daily means & covariance
+#     daily_means_pd = returns_df.mean()
+#     cov_matrix_pd = returns_df.cov()
+#     tickers = returns_df.columns.tolist()
 
-    # 2) Compute daily means & covariance
-    daily_means_pd = returns_df.mean()
-    cov_matrix_pd = returns_df.cov()
-    tickers = returns_df.columns.tolist()
+#     mu = daily_means_pd.values  # shape (n,)
+#     Sigma = cov_matrix_pd.values # shape (n,n)
+#     n = len(mu)
 
-    mu = daily_means_pd.values  # shape (n,)
-    Sigma = cov_matrix_pd.values # shape (n,n)
-    n = len(mu)
+#     # 3) Transaction costs (naive approach)
+#     note_on_tc = "No transaction cost applied."
+#     if config_section.get("include_transaction_costs", False):
+#         tc = config_section.get("transaction_costs", 0.0)
+#         if tc > 0:
+#             # approximate daily cost
+#             daily_tc = (1 + tc)**(1/252) - 1
+#             mu = mu - daily_tc
+#             note_on_tc = (
+#                 f"Transaction costs of {tc*100:.2f}% included. "
+#                 f"Approximated as daily deduction of {daily_tc*100:.4f}% from returns."
+#             )
 
-    # 3) Transaction costs (naive approach)
-    note_on_tc = "No transaction cost applied."
-    if config_section.get("include_transaction_costs", False):
-        tc = config_section.get("transaction_costs", 0.0)
-        if tc > 0:
-            # approximate daily cost
-            daily_tc = (1 + tc)**(1/252) - 1
-            mu = mu - daily_tc
-            note_on_tc = (
-                f"Transaction costs of {tc*100:.2f}% included. "
-                f"Approximated as daily deduction of {daily_tc*100:.4f}% from returns."
-            )
+#     # 4) Constraints
+#     min_alloc = config_section["constraints"].get("min_allocation", 0.0)
+#     max_alloc = config_section["constraints"].get("max_allocation", 1.0)
 
-    # 4) Constraints
-    min_alloc = config_section["constraints"].get("min_allocation", 0.0)
-    max_alloc = config_section["constraints"].get("max_allocation", 1.0)
+#     # target_volatility -> daily
+#     target_vol = None
+#     if "target_volatility" in config_section:
+#         annual_vol = config_section["target_volatility"]
+#         target_vol = annual_vol / np.sqrt(252)
 
-    # target_volatility -> daily
-    target_vol = None
-    if "target_volatility" in config_section:
-        annual_vol = config_section["target_volatility"]
-        target_vol = annual_vol / np.sqrt(252)
+#     # min_return_constraint -> daily
+#     min_ret = None
+#     if "min_return_constraint" in config_section:
+#         annual_req = config_section["min_return_constraint"]
+#         min_ret = (1 + annual_req)**(1/252) - 1
 
-    # min_return_constraint -> daily
-    min_ret = None
-    if "min_return_constraint" in config_section:
-        annual_req = config_section["min_return_constraint"]
-        min_ret = (1 + annual_req)**(1/252) - 1
+#     rebalance_freq = config_section.get("rebalance_frequency", "N/A")
+#     goal = config_section.get("goal", "min_variance")
 
-    rebalance_freq = config_section.get("rebalance_frequency", "N/A")
-    goal = config_section.get("goal", "min_variance")
+#     # 5) Setup CVX variables & constraints
+#     w = cp.Variable(n)
+#     constraints = [cp.sum(w) == 1, w >= min_alloc, w <= max_alloc]
 
-    # 5) Setup CVX variables & constraints
-    w = cp.Variable(n)
-    constraints = [cp.sum(w) == 1, w >= min_alloc, w <= max_alloc]
+#     if target_vol is not None:
+#         constraints.append(cp.quad_form(w, Sigma) <= target_vol**2)
+#     if min_ret is not None:
+#         constraints.append(w @ mu >= min_ret)
 
-    if target_vol is not None:
-        constraints.append(cp.quad_form(w, Sigma) <= target_vol**2)
-    if min_ret is not None:
-        constraints.append(w @ mu >= min_ret)
+#     # 6) Objective
+#     if goal == "min_variance":
+#         objective = cp.Minimize(cp.quad_form(w, Sigma))
+#     elif goal == "maximize_return":
+#         objective = cp.Maximize(mu @ w)
+#     else:
+#         # If user tries a goal that's not supported, raise error
+#         raise ValueError(
+#             f"Unsupported optimization goal '{goal}'. "
+#             f"Use 'min_variance' or 'maximize_return' instead."
+#         )
 
-    # 6) Objective
-    if goal == "min_variance":
-        objective = cp.Minimize(cp.quad_form(w, Sigma))
-    elif goal == "maximize_return":
-        objective = cp.Maximize(mu @ w)
-    else:
-        # If user tries a goal that's not supported, raise error
-        raise ValueError(
-            f"Unsupported optimization goal '{goal}'. "
-            f"Use 'min_variance' or 'maximize_return' instead."
-        )
+#     # 7) Solve
+#     problem = cp.Problem(objective, constraints)
+#     result = problem.solve()
 
-    # 7) Solve
-    problem = cp.Problem(objective, constraints)
-    result = problem.solve()
+#     if w.value is None:
+#         raise ValueError("No feasible solution found for the optimization problem.")
 
-    if w.value is None:
-        raise ValueError("No feasible solution found for the optimization problem.")
+#     # 8) Prepare final result
+#     w_val = w.value.round(4)
+#     final_allocation = {tickers[i]: float(w_val[i]) for i in range(n)}
 
-    # 8) Prepare final result
-    w_val = w.value.round(4)
-    final_allocation = {tickers[i]: float(w_val[i]) for i in range(n)}
-
-    return {
-        "optimal_allocation": final_allocation,
-        "objective_value": float(result),
-        "goal": goal,
-        "rebalance_frequency": rebalance_freq,
-        "note_on_transaction_costs": note_on_tc
-    }
+#     return {
+#         "optimal_allocation": final_allocation,
+#         "objective_value": float(result),
+#         "goal": goal,
+#         "rebalance_frequency": rebalance_freq,
+#         "note_on_transaction_costs": note_on_tc
+#     }
 
 
 # -------------------------------------------------------------------------
@@ -906,27 +902,27 @@ async def calculate_metrics_service(user_id: int, metric_config: Dict) -> Dict:
         # --------------------------------------------------------------------------------
         # 5G. Portfolio Optimization
         # --------------------------------------------------------------------------------
-        opt_config = metric_config["metrics"].get("portfolio_optimization", {})
-        if opt_config.get("enable"):
-            if not ticker_returns:
-                results["metrics"]["portfolio_optimization"] = {"error": "No ticker returns available"}
-            else:
-                all_idx = pd.Index([])
-                for t in ticker_returns:
-                    all_idx = all_idx.union(ticker_returns[t].index)
-                all_idx = all_idx.sort_values()
+        # opt_config = metric_config["metrics"].get("portfolio_optimization", {})
+        # if opt_config.get("enable"):
+        #     if not ticker_returns:
+        #         results["metrics"]["portfolio_optimization"] = {"error": "No ticker returns available"}
+        #     else:
+        #         all_idx = pd.Index([])
+        #         for t in ticker_returns:
+        #             all_idx = all_idx.union(ticker_returns[t].index)
+        #         all_idx = all_idx.sort_values()
 
-                df_ret = pd.DataFrame(index=all_idx)
-                for t in ticker_returns:
-                    df_ret[t] = ticker_returns[t].reindex(all_idx)
+        #         df_ret = pd.DataFrame(index=all_idx)
+        #         for t in ticker_returns:
+        #             df_ret[t] = ticker_returns[t].reindex(all_idx)
 
-                try:
-                    optimization_output = portfolio_optimization(df_ret, opt_config)
-                    results["metrics"]["portfolio_optimization"] = optimization_output
-                except ValueError as ve:
-                    results["metrics"]["portfolio_optimization"] = {"error": str(ve)}
-                except Exception as ex:
-                    raise APIError({"message": f"An error occurred in portfolio optimization: {ex}"})
+        #         try:
+        #             optimization_output = portfolio_optimization(df_ret, opt_config)
+        #             results["metrics"]["portfolio_optimization"] = optimization_output
+        #         except ValueError as ve:
+        #             results["metrics"]["portfolio_optimization"] = {"error": str(ve)}
+        #         except Exception as ex:
+        #             raise APIError({"message": f"An error occurred in portfolio optimization: {ex}"})
 
 
         # --------------------------------------------------------------------------------
