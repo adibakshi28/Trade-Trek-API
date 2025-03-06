@@ -9,10 +9,10 @@ from app.services.calculation_service import calculate_metrics_service
 
 router = APIRouter()
 
-@router.get("/ask-deepseek")
+@router.get("/ask")
 def ask_ai(input_str: str, payload: dict = Depends(require_active_session)) -> Dict:
     """
-    Ask Deepseek 
+    Ask AI 
     """
     user_id = payload.get("user_id")
     res = ask_ai_service(user_id, input_str)

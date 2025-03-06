@@ -398,85 +398,84 @@ Example................................................................
 
 
 {
-  "timeframe": {
-    "start_date": "2023-01-01",
-    "end_date": "2024-01-01"
-  },
-  "resolution": "1day",
-  "benchmark": "SPY",
-  "metrics": {
-    "volatility_measures": {
-      "enable": false,
-      "measures": ["standard_deviation", "beta", "var", "es"],
-      "rolling_window": 30,
-      "historical_period": "1Y",
-      "time_series": ["standard_deviation", "var", "es"],
-      "var_es_settings": {
-        "periods": "1D",
-        "resolution": "1h",
-        "confidence_level": 0.95,
-        "method": "historical"
-      }
+    "timeframe": {
+        "start_date": "2023-01-01",
+        "end_date": "2024-01-01"
     },
-    "correlation_diversification": {
-      "enable": false,
-      "measures": ["correlation_coefficient", "r_squared", "tracking_error"],
-      "benchmark": "SPY",
-      "correlation_method": "pearson"
+    "resolution": "1day",
+    "benchmark": "SPY",
+    "metrics": {
+        "volatility_measures": {
+            "enable": true,
+            "measures": ["standard_deviation", "beta", "var", "es"],
+            "rolling_window": 30,
+            "historical_period": "1Y",
+            "time_series": [],
+            "var_es_settings": {
+                "periods": "1D",
+                "resolution": "1h",
+                "confidence_level": 0.95,
+                "method": "historical"
+            }
+        },
+        "correlation_diversification": {
+            "enable": false,
+            "measures": ["correlation_coefficient", "r_squared", "tracking_error"],
+            "benchmark": "SPY",
+            "correlation_method": "pearson"
+        },
+        "drawdown_measures": {
+            "enable": false,
+            "measures": ["mdd", "average_drawdown", "recovery_time"],
+            "rolling_drawdown_window": 30,
+            "event_highlighting": true,
+            "time_series": ["mdd"]
+        },
+        "tail_risk": {
+            "enable": false,
+            "measures": ["skewness", "kurtosis"],
+            "threshold_percentile": 0.01,
+            "distribution_model": "empirical",
+            "time_series": []
+        },
+        "risk_adjusted_performance": {
+            "enable": false,
+            "measures": ["sharpe_ratio", "information_ratio"],
+            "benchmark": "SPY",
+            "risk_free_rate": 0.03,
+            "comparison_periods": ["1M", "1Y", "3Y"],
+            "adjust_benchmark_weights": false,
+            "rolling_sharpe_window": 30,
+            "time_series": []
+        },
+        "distribution": {
+            "enable": false,
+            "measures": ["sector_distribution", "hhi"],
+            "sector_breakdown": true,
+            "hhi_analysis": true,
+            "time_series": []
+        },
+        "portfolio_optimization": {
+            "enable": false,
+            "measures": ["optimal_allocation"],
+            "goal": "maximize_return",
+            "constraints": {
+                "min_allocation": 0.05,
+                "max_allocation": 0.50
+            },
+            "target_volatility": 0.2,
+            "min_return_constraint": 0.1,
+            "include_transaction_costs": true,
+            "transaction_costs": 0.01,
+            "rebalance_frequency": "monthly",
+            "risk_free_rate": 0.03,
+            "time_series": []
+        }
     },
-    "drawdown_measures": {
-      "enable": false,
-      "measures": ["mdd", "average_drawdown", "recovery_time"],
-      "rolling_drawdown_window": 30,
-      "event_highlighting": true,
-      "time_series": ["mdd"]
-    },
-    "tail_risk": {
-      "enable": false,
-      "measures": ["skewness", "kurtosis"],
-      "threshold_percentile": 0.01,
-      "distribution_model": "empirical",
-      "time_series": []
-    },
-    "risk_adjusted_performance": {
-      "enable": false,
-      "measures": ["sharpe_ratio", "information_ratio"],
-      "benchmark": "SPY",
-      "risk_free_rate": 0.03,
-      "comparison_periods": ["1M", "1Y", "3Y"],
-      "adjust_benchmark_weights": false,
-      "rolling_sharpe_window": 30,
-      "time_series": []
-    },
-    "distribution": {
-      "enable": false,
-      "measures": ["sector_distribution", "hhi"],
-      "sector_breakdown": true,
-      "hhi_analysis": true,
-      "time_series": []
-    },
-    "portfolio_optimization": {
-      "enable": false,
-      "measures": ["optimal_allocation"],
-      "goal": "maximize_return",
-      "constraints": {
-        "min_allocation": 0.05,
-        "max_allocation": 0.50
-      },
-      "target_volatility": 0.2,
-      "min_return_constraint": 0.1,
-      "include_transaction_costs": true,
-      "transaction_costs": 0.01,
-      "rebalance_frequency": "monthly",
-      "risk_free_rate": 0.03,
-      "time_series": []
+    "settings": {
+        "return_type": "arithmetic",
+        "include_portfolio": false,
+        "include_benchmark_trend": false
     }
-  },
-  "settings": {
-    "return_type": "arithmetic",
-    "include_portfolio": false,
-    "include_benchmark_trend": false
-  }
 }
-
 

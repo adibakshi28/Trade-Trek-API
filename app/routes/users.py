@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends
 from typing import List, Dict, Optional
 
 from app.middlewares.jwt_auth import require_active_session
-from app.services.user_service import user_transactions_service, user_funds_service, user_info_service, user_portfolio_service, user_trade_summary_service, get_user_watchlist_service, add_to_user_watchlist_service, remove_from_user_watchlist_service, user_portfolio_history_service, notification_service, mark_notification_read_service, get_user_friends_service, send_friend_request_service, accept_friend_request_service, decline_friend_request_service, create_group_service, send_group_invite_service, accept_group_invite_service, decline_group_invite_service, group_info_service, group_leaderboard_service, friend_summary_service, get_all_groups_for_user_service, user_group_search_to_add_service, user_friend_search_to_add_service, user_group_search_to_join_service, request_to_join_group_service, accept_group_join_request_service, decline_group_join_request_service
+from app.services.user_service import user_transactions_service, user_funds_service, user_info_service, user_portfolio_service, user_trade_summary_service, get_user_watchlist_service, add_to_user_watchlist_service, remove_from_user_watchlist_service, user_portfolio_history_service, notification_service, mark_notification_read_service, get_user_friends_service, send_friend_request_service, accept_friend_request_service, decline_friend_request_service, create_group_service, send_group_invite_service, accept_group_invite_service, decline_group_invite_service, group_info_service, group_leaderboard_service, friend_summary_service, get_all_groups_for_user_service, user_group_search_to_add_service, user_friend_search_to_add_service, user_group_search_to_join_service, request_to_join_group_service, accept_group_join_request_service, decline_group_join_request_service, submit_user_risk_profile_service, calculate_final_risk_score
 from app.services.calculation_service import calculate_metrics_service
+from app.services.data_service import risk_profile_qna_service
 
 router = APIRouter()
 
@@ -312,4 +313,31 @@ async def calculate_metrics(metric_config: dict, payload: dict = Depends(require
     """
     user_id = payload.get("user_id")
     response = await calculate_metrics_service(user_id, metric_config)
+    return response
+
+@router.get("/risk-profile/questionnaire")
+def get_risk_profile_qna(payload: dict = Depends(require_active_session)) -> List[Dict]:
+    """
+    Return questions and answer structure for risk profile questionare
+    """
+    user_id = payload.get("user_id")
+    response = risk_profile_qna_service(user_id)
+    return response
+
+@router.post("/risk-profile")
+def submit_user_risk_profile(questionnaire_result: List[Dict], payload: dict = Depends(require_active_session)):
+    """
+    Submit user risk profile questionare answers
+    """
+    user_id = payload.get("user_id")
+    response = submit_user_risk_profile_service(user_id, questionnaire_result)
+    return response
+
+@router.get("/risk-score")
+def get_risk_score(payload: dict = Depends(require_active_session)) -> Dict:
+    """
+    Return risk score of the user
+    """
+    user_id = payload.get("user_id")
+    response = calculate_final_risk_score(user_id)
     return response
