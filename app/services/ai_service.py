@@ -58,7 +58,7 @@ async def metric_insights_service(user_id: int, metric_config: Dict):
 
         metric_result = await calculate_metrics_service(user_id, metric_config)
         metric_result_str = json.dumps(metric_result)
-        metric_result_str = "These are my volatility metrics for the portfolio along with my current portfolio :\n" + metric_result_str
+        metric_result_str = "These are my risk and performance metrics for the portfolio along with my current portfolio :\n" + metric_result_str
     
         headers = {
             "Content-Type": "application/json",

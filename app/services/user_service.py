@@ -1342,3 +1342,81 @@ async def friend_summary_service(user_id: int, friend_username: str):
 
     except Exception as e:
         raise e
+    
+
+def calculate_final_risk_score(user_id: int) -> int:
+    """
+    Calculates the user's total risk score by summing up (question_weight * answer_weight) for each active answer in the User_Risk_Profile table.
+    """
+    try:
+        response = supabase.table("User_Risk_Profile").select("*, question:Risk_Profile_Questions(*), answer:Risk_Profile_Answers(*)").eq("user_id", user_id).eq("is_active", True).execute()
+
+        if not response:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error retrieving user risk profile data"
+            )
+
+        rows = response.data
+        total_score = 0.0
+
+        for row in rows:
+            question_weight = row["question"].get("weight") or 0
+            answer_weight = row["answer"].get("weight") or 0
+            total_score += float(question_weight) * float(answer_weight)
+
+        total_score = total_score * 100
+
+        if(total_score > 75):
+            risk_category = "High"
+        elif (total_score > 50):
+            risk_category = "Moderate"
+        elif (total_score > 25):
+            risk_category = "Low"
+        else:
+            risk_category = "Very Low"
+    
+        return {"risk_score": int(total_score), "risk_category": risk_category}
+    
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+    
+def submit_user_risk_profile_service(user_id: int, questionnaire_result: List[Dict]):
+    try:
+        data_to_upsert = []
+        for item in questionnaire_result:
+            question_id = item.get("question_id")
+            answer_id = item.get("answer_id")
+
+            if not question_id or not answer_id:
+                continue
+            
+            data_to_upsert.append({
+                "user_id": user_id,
+                "question_id": question_id,
+                "answer_id": answer_id,
+                "is_active": True 
+            })
+
+        if not data_to_upsert:
+            raise HTTPException(
+                    status_code=400,
+                    detail="Nothing to update"
+                )
+                
+        # Perform upsert: - on_conflict=["user_id","question_id"] means if a row already exists with the same user_id and question_id, it will be updated with the new answer_id.
+        supabase.table("User_Risk_Profile").upsert(data_to_upsert, on_conflict="user_id, question_id").execute()
+
+        risk_score = calculate_final_risk_score(user_id)["risk_score"]
+        risk_category = calculate_final_risk_score(user_id)["risk_category"]
+
+        return {
+            "success": True,
+            "risk_score": risk_score,
+            "risk_category": risk_category,
+            "message": "User risk profile updated successfully."
+        }
+    
+    except Exception as e:
+        return {"success": False, "message": str(e)}

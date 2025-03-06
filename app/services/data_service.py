@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from typing import List, Optional
 from dateutil.parser import isoparse
+from collections import defaultdict
 
 from app.core.config import config
 from app.models.database import supabase
@@ -641,6 +642,40 @@ async def stock_transaction_service(user_id: int, ticker: str, direction: str, q
             "success": False,
             "message": http_ex.detail
         }
+    except Exception as ex:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal Server Error: {str(ex)}"
+        )
+    
+
+def risk_profile_qna_service(user_id: int):
+    try:
+        questions_res = supabase.table("Risk_Profile_Questions").select("*").eq("is_active", True).execute()
+        answers_res = supabase.table("Risk_Profile_Answers").select("*").eq("is_active", True).execute()
+        
+        questions = questions_res.data  
+        answers = answers_res.data    
+
+        answers_by_qid = defaultdict(list)
+        for ans in answers:
+            q_id = ans["question_id"]
+            answers_by_qid[q_id].append({
+                "id": ans["id"],
+                "answer": ans["answer"],
+            })
+
+        result = []
+        for q in questions:
+            question_id = q["id"]
+            result.append({
+                "id": question_id,
+                "question": q["question"],
+                "answers": answers_by_qid.get(question_id, [])
+            })
+
+        return result  
+    
     except Exception as ex:
         raise HTTPException(
             status_code=500,
