@@ -1346,10 +1346,10 @@ async def friend_summary_service(user_id: int, friend_username: str):
 
 def calculate_final_risk_score(user_id: int) -> int:
     """
-    Calculates the user's total risk score by summing up (question_weight * answer_weight) for each active answer in the User_Risk_Profile table.
+    Calculates the user's total risk score by summing up (question_weight * answer_weight) for each active answer in the User_Risk_Profile_Answers table.
     """
     try:
-        response = supabase.table("User_Risk_Profile").select("*, question:Risk_Profile_Questions(*), answer:Risk_Profile_Answers(*)").eq("user_id", user_id).eq("is_active", True).execute()
+        response = supabase.table("User_Risk_Profile_Answers").select("*, question:Risk_Profile_Questions(*), answer:Risk_Profile_Answers(*)").eq("user_id", user_id).eq("is_active", True).execute()
 
         if not response:
             raise HTTPException(
@@ -1406,7 +1406,7 @@ def submit_user_risk_profile_service(user_id: int, questionnaire_result: List[Di
                 )
                 
         # Perform upsert: - on_conflict=["user_id","question_id"] means if a row already exists with the same user_id and question_id, it will be updated with the new answer_id.
-        supabase.table("User_Risk_Profile").upsert(data_to_upsert, on_conflict="user_id, question_id").execute()
+        supabase.table("User_Risk_Profile_Answers").upsert(data_to_upsert, on_conflict="user_id, question_id").execute()
 
         risk_score = calculate_final_risk_score(user_id)["risk_score"]
         risk_category = calculate_final_risk_score(user_id)["risk_category"]
