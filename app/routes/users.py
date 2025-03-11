@@ -336,7 +336,7 @@ def submit_user_risk_profile(questionnaire_result: List[Dict], payload: dict = D
 @router.get("/risk-score")
 def get_risk_score(payload: dict = Depends(require_active_session)) -> Dict:
     """
-    Return risk score of the user
+    Return risk score and category of the user
     """
     user_id = payload.get("user_id")
     response = calculate_final_risk_score(user_id)
