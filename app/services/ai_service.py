@@ -91,8 +91,6 @@ async def metric_insights_service(user_id: int, metric_config: Dict):
         raise e
 
 
-# Test
-
 async def stock_insights_service(user_id: int, stock_data: Dict):
     try:
         stock_data_str = json.dumps(stock_data)
