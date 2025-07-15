@@ -90,7 +90,6 @@ async def metric_insights_service(user_id: int, metric_config: Dict):
     except Exception as e:
         raise e
 
-# Test
 async def stock_insights_service(user_id: int, stock_data: Dict):
     try:
         stock_data_str = json.dumps(stock_data)
