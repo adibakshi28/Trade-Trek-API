@@ -8,7 +8,7 @@ from app.services.data_service import search_stock_service, stock_info_service, 
 
 router = APIRouter()
 
-
+# cOMMENT
 @router.get("/")
 async def get_stock_info(ticker: str, payload: dict = Depends(require_active_session)):
     """
